@@ -1,5 +1,12 @@
 import csv
+from lxml import etree
 from collections import OrderedDict
+
+NSVDEX = 'http://www.imsglobal.org/xsd/imsvdex_v1p0'
+NSMAP = dict(None=NSVDEX)
+
+def vtag(tag):
+    return "{%s}%s" % NSVDEX, tag 
 
 class CSV2VDEX(object):
     
@@ -57,10 +64,7 @@ class CSV2VDEX(object):
                 branch[part] = OrderedDict(), values
         return tree
     
-    @property
-    def _vdexxml(self):
-        return ''
-    
     def __call__(self):
-        return ''
-                
+        root = etree.Element(vtag("vocabulary"), nsmap=NSMAP)        
+        return etree.tostring(root, pretty_print=True)
+                    

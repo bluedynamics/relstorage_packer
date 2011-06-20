@@ -44,7 +44,7 @@ Get the CSV, first flat::
     'eins zwei drei']))]), ['ex', 'ix'])), ('Y', (OrderedDict(), ['epsilon', 
     'ypsilon']))]), ['ten thousand', 'zehntausend']))])
     
-    >> interact(locals())
     
 Get the XML::
 
+    >>> c2v() 
