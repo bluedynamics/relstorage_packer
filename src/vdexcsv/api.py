@@ -3,16 +3,17 @@ from lxml import etree
 from collections import OrderedDict
 
 NSVDEX = 'http://www.imsglobal.org/xsd/imsvdex_v1p0'
-NSMAP = dict(None=NSVDEX)
+NSMAP = {None: NSVDEX}
 
 def vtag(tag):
-    return "{%s}%s" % NSVDEX, tag 
+    return "{%s}%s" % (NSVDEX, tag) 
 
 class CSV2VDEX(object):
     
     def __init__(self, name, infile, outfile, 
                  startrow=0, colkey=0, colstartvalue=1, langs=['en'],
-                 dialect='excel', delimiter=';', treevocabdelimiter='.'):
+                 dialect='excel', delimiter=';', treevocabdelimiter='.',
+                 ordered=True):
         self.name = name
         self.infile = infile
         self.outfile = outfile
@@ -22,6 +23,7 @@ class CSV2VDEX(object):
         self.langs = langs
         self.delimiter = delimiter
         self.treevocabdelimiter = treevocabdelimiter
+        self.ordered = ordered
         if dialect not in csv.list_dialects():
             raise ValueError, "given csv dialect '%s' is unknown. " % dialect +\
                               "pick one of theses: %s" % csv.list_dialects() 
@@ -61,10 +63,25 @@ class CSV2VDEX(object):
                     branch = branch[part][0]
                     continue
                 values = [item[_] for _ in self.langs]
-                branch[part] = OrderedDict(), values
+                branch[part] = OrderedDict(), values, item['key']
         return tree
     
     def __call__(self):
-        root = etree.Element(vtag("vocabulary"), nsmap=NSMAP)        
-        return etree.tostring(root, pretty_print=True)
-                    
+        root = etree.Element(vtag("vocabulary"), nsmap=NSMAP) 
+        root.attrib['orderSignificant'] = str(self.ordered).lower()
+        vid = etree.SubElement(root, vtag('vocabIdentifier'))
+        vid.text = self.name
+        def treeworker(tree, parent):
+            for key in tree:
+                subtree, values, longkey = tree[key]
+                term = etree.SubElement(parent, vtag('term'))
+                termid = etree.SubElement(term, vtag('termIdentifier'))
+                termid.text = longkey
+                caption = etree.SubElement(term, vtag('caption'))
+                for idx in range(0, len(values)):
+                    langstring = etree.SubElement(caption, vtag('langstring'))
+                    langstring.text = values[idx]
+                    langstring.attrib['language'] = self.langs[idx]                     
+                treeworker(subtree, term)
+        treeworker(self._csvdict, root)            
+        return etree.tostring(root, pretty_print=True)                    
