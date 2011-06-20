@@ -1,2 +1,0 @@
-"key"; "value-de"; "value-en"
-"jey2"; "value-zwei"; "value-two" 
