@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import os
 
 version = '1.0'
-shortdesc = 
+shortdesc = \
 'Converts CSV files to IMS VDEX XML (Vocabulary Definition Exchange Format)'
 longdesc = open(os.path.join(os.path.dirname(__file__), 'README.rst')).read()
 longdesc += open(os.path.join(os.path.dirname(__file__), 'HISTORY.rst')).read()
