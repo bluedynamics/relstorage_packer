@@ -9,14 +9,14 @@ for each language a column with the translated terms value.
 A flat vocabulary
 -----------------
 
---- ------- -------- ---------   
+=== ======= ======== =========
 key english german   italian
---- ------- -------- ---------
+=== ======= ======== =========
 k01 ant     Ameise   formica
 k02 bee     Biene    ape   
 k03 vesp    Wespe    vespa
 k04 hornet  Hornisse calabrone
---- ------- -------- ---------
+=== ======= ======== =========
 
 As a csv this looks like:
 
@@ -80,9 +80,9 @@ A tree vocabulary
 If we want to have a tree-like vocabulary, the key is used to define the level.
 Here a dot is used as delimiter.
 
------ --------------------
+===== ====================
 key   term value
------ --------------------
+===== ====================
 nwe   North-west of Europe
 nwe.1 A. m. iberica
 nwe.2 A. m. intermissa
@@ -96,7 +96,7 @@ swe.3 A. m. ligustica
 swe.4 A. m. macedonica
 swe.5 A. m. ruttneri
 swe.6 A. m. sicula
------ --------------------
+===== ====================
 
 As a CSV it looks like:    
 
