@@ -37,4 +37,7 @@ setup(name='vdexcsv',
       extras_require = dict(
           test=tests_require,
       ),
+      entry_points={
+        'console_scripts': ['csv2vdex = vdexcsv.script:run'],
+      },      
 )

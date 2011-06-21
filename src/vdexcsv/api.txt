@@ -3,19 +3,23 @@
     
 Find the field names::
 
-    >>> c2v = api.CSV2VDEX('foo', 'foo.csv', 'foo.xml')
+    >>> c2v = api.CSV2VDEX('foo', 'Foo', 'foo.csv', 'foo.xml')
     >>> c2v._fields
     ['key', 'en']
 
-    >>> c2v = api.CSV2VDEX('foo', 'foo.csv', 'foo.xml', langs=['en','de'])
+    >>> c2v = api.CSV2VDEX('foo', 'FooEn,FooDe', 'foo.csv', 'foo.xml', 
+    ...                    langs=['en','de'])
+    >>> c2v.names
+    OrderedDict([('en', 'FooEn'), ('de', 'FooDe')])
+    
     >>> c2v._fields
     ['key', 'en', 'de']
 
-    >>> c2v = api.CSV2VDEX('foo', 'foo.csv', 'foo.xml', colkey=3)
+    >>> c2v = api.CSV2VDEX('foo', 'Foo', 'foo.csv', 'foo.xml', colkey=3)
     >>> c2v._fields
     ['__genkey-0', 'en', '__genkey-2', 'key']
 
-    >>> c2v = api.CSV2VDEX('foo', 'foo.csv', 'foo.xml', colkey=1)
+    >>> c2v = api.CSV2VDEX('foo', 'Foo', 'foo.csv', 'foo.xml', colkey=1)
     >>> c2v._fields
     Traceback (most recent call last):
     ...
@@ -26,7 +30,7 @@ Get the CSV, first flat::
     >>> import os
     >>> testdatadir =  os.path.join(os.path.dirname(api.__file__), 'testdata')
     >>> infilename = os.path.join(testdatadir, 'test1.csv')
-    >>> c2v = api.CSV2VDEX('test', infilename, 'test1.xml', startrow=1, 
+    >>> c2v = api.CSV2VDEX('test', 'Test', infilename, 'test1.xml', startrow=1, 
     ...                    langs=['en', 'de'])    
     >>> c2v._csvdict
     OrderedDict([('100', (OrderedDict(), ['hundered', 'hundert'], '100')), 
@@ -36,8 +40,8 @@ Get the CSV, first flat::
 and as tree::
 
     >>> infilename = os.path.join(testdatadir, 'test2.csv')
-    >>> c2v = api.CSV2VDEX('test', infilename, 'test1.xml', startrow=1, 
-    ...                    langs=['en', 'de'])
+    >>> c2v = api.CSV2VDEX('test', 'TestEn,TestDe', infilename, 
+    ...                    'test1.xml', startrow=1, langs=['en', 'de'])
     >>> c2v._csvdict
     OrderedDict([('100', (OrderedDict([('1', (OrderedDict(), ['one', 'eins'], 
     '100.1')), ('2', (OrderedDict(), ['two', 'zwei'], '100.2'))]), ['hundered', 
@@ -52,9 +56,13 @@ and as tree::
     
 Get the XML::
 
-    >>> print c2v() 
+    >>> print c2v._xml 
     <vocabulary xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" orderSignificant="true">
       <vocabIdentifier>test</vocabIdentifier>
+      <vocabName>
+        <langstring language="en">TestEn</langstring>
+        <langstring language="de">TestDe</langstring>
+      </vocabName>
       <term>
         <termIdentifier>100</termIdentifier>
         <caption>
@@ -133,5 +141,4 @@ Get the XML::
         </term>
       </term>
     </vocabulary>
-    <BLANKLINE>
     

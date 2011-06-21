@@ -10,11 +10,16 @@ def vtag(tag):
 
 class CSV2VDEX(object):
     
-    def __init__(self, name, infile, outfile, 
-                 startrow=0, colkey=0, colstartvalue=1, langs=['en'],
+    def __init__(self, vid, names, infile, outfile, 
+                 startrow=0, colkey=0, colstartvalue=1, langs='en',
                  dialect='excel', delimiter=';', treevocabdelimiter='.',
                  ordered=True):
-        self.name = name
+        self.vid = vid
+        if isinstance(langs, basestring):
+            langs = [_.strip() for _ in langs.split(',')]
+        if isinstance(names, basestring):
+            names = [_.strip() for _ in names.split(',')]
+        self.names = OrderedDict(zip(langs, names))
         self.infile = infile
         self.outfile = outfile
         self.startrow = startrow
@@ -66,11 +71,17 @@ class CSV2VDEX(object):
                 branch[part] = OrderedDict(), values, item['key']
         return tree
     
-    def __call__(self):
+    @property
+    def _xml(self):
         root = etree.Element(vtag("vocabulary"), nsmap=NSMAP) 
         root.attrib['orderSignificant'] = str(self.ordered).lower()
         vid = etree.SubElement(root, vtag('vocabIdentifier'))
-        vid.text = self.name
+        vid.text = self.vid
+        cap = etree.SubElement(root, vtag('vocabName'))
+        for lang in self.names:
+            langstring = etree.SubElement(cap, vtag('langstring'))
+            langstring.text = self.names[lang]
+            langstring.attrib['language'] = lang                     
         def treeworker(tree, parent):
             for key in tree:
                 subtree, values, longkey = tree[key]
@@ -84,4 +95,9 @@ class CSV2VDEX(object):
                     langstring.attrib['language'] = self.langs[idx]                     
                 treeworker(subtree, term)
         treeworker(self._csvdict, root)            
-        return etree.tostring(root, pretty_print=True)                    
+        return etree.tostring(root, pretty_print=True)                        
+
+    def __call__(self):
+        with open(self.outfile, 'w') as outfile:
+            outfile.write(self._xml)        
+            
