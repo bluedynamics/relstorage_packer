@@ -49,7 +49,7 @@ class CSV2VDEX(object):
     def _csvdict(self):
         infile = self.infile
         if isinstance(infile, basestring):
-            infile = open(infile, 'r')
+            infile = open(infile, 'r', newline='')
         value = csv.DictReader(infile, fieldnames=self._fields,
                                dialect=self.dialect, 
                                delimiter=self.delimiter)

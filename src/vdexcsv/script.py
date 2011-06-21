@@ -8,7 +8,7 @@ parser.add_argument('--languages', '-l', nargs='?', default='en',
 parser.add_argument('--startrow', '-r', nargs='?', type=int, default=0, 
                     help='number of row in CSV file where to begin reading, '
                         'starts with 0, default 0.')
-parser.add_argument('-keycolumn', '-k', nargs='?', type=int, default=0, 
+parser.add_argument('--keycolumn', '-k', nargs='?', type=int, default=0, 
                     help='number of column with the keys of the vocabulary, '
                          'start with 0, default 0.')
 parser.add_argument('--startcolumn', '-s', nargs='?', type=int, default=1, 
