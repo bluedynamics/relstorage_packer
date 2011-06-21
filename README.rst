@@ -18,7 +18,7 @@ k03 vesp    Wespe    vespa
 k04 hornet  Hornisse calabrone
 === ======= ======== =========
 
-As a csv this looks like:
+As a csv this looks like::
 
     "key";"english";"german";"italian"
     "k01";"ant";"Ameise";"formica"
@@ -98,7 +98,7 @@ swe.5 A. m. ruttneri
 swe.6 A. m. sicula
 ===== ====================
 
-As a CSV it looks like:    
+As a CSV it looks like::
 
     "key";"term value"
     "nwe";"North-west of Europe"
