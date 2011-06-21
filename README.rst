@@ -2,7 +2,7 @@ Converter from CSV file to a multilingual IMS VDEX voacabulary XML file.
 
 VDEX is a very good standardized format for multilingual vocabularies, 
 ontologies, etc. It just sucks to create its XML manually. There is poor editor 
-support. But everybody has Excel, well, but almost everybody nows how to create 
+support. But everybody has Excel, well, but almost everybody knows how to create 
 tables. So let the user create a sheet with a column of keys for each term and 
 for each language a column with the translated terms value. 
 
@@ -14,7 +14,7 @@ key english german   italian
 === ======= ======== =========
 k01 ant     Ameise   formica
 k02 bee     Biene    ape   
-k03 vesp    Wespe    vespa
+k03 wasp    Wespe    vespa
 k04 hornet  Hornisse calabrone
 === ======= ======== =========
 
@@ -23,7 +23,7 @@ As a csv this looks like::
     "key";"english";"german";"italian"
     "k01";"ant";"Ameise";"formica"
     "k02";"bee";"Biene";"ape"
-    "k03";"vesp";"Wespe";"vespa"
+    "k03";"wasp";"Wespe";"vespa"
     "k04";"hornet";"Hornisse";"calabrone"
 
 After running through csv2vdex, called like so::
@@ -59,7 +59,7 @@ This results it such a VDEX XML::
       <term>
         <termIdentifier>k03</termIdentifier>
         <caption>
-          <langstring language="en">vesp</langstring>
+          <langstring language="en">wasp</langstring>
           <langstring language="de">Wespe</langstring>
           <langstring language="it">vespa</langstring>
         </caption>
