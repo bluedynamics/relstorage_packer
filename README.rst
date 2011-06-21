@@ -1,4 +1,10 @@
-Converter form CSV file to a multilingual IMS VDEX voacabulary XML file.
+Converter from CSV file to a multilingual IMS VDEX voacabulary XML file.
+
+VDEX is a very good standardized format for multilingual vocabularies, 
+ontologies, etc. It just sucks to create its XML manually. There is poor editor 
+support. But everybody has Excel, well, but almost everybody nows how to create 
+tables. So let the user create a sheet with a column of keys for each term and 
+for each language a column with the translated terms value. 
 
 Source Code
 ===========

@@ -2,7 +2,7 @@
 
     >>> parser.print_help()
     usage: test [-h] [--languages [LANGUAGES]] [--startrow [STARTROW]]
-                [-keycolumn [KEYCOLUMN]] [--startcolumn [STARTCOLUMN]]
+                [--keycolumn [KEYCOLUMN]] [--startcolumn [STARTCOLUMN]]
                 [--ordered [ORDERED]] [--dialect [DIALECT]]
                 [--csvdelimiter [CSVDELIMITER]] [--treedelimiter [TREEDELIMITER]]
                 id name source target
@@ -25,7 +25,7 @@
       --startrow [STARTROW], -r [STARTROW]
                             number of row in CSV file where to begin reading,
                             starts with 0, default 0.
-      -keycolumn [KEYCOLUMN], -k [KEYCOLUMN]
+      --keycolumn [KEYCOLUMN], -k [KEYCOLUMN]
                             number of column with the keys of the vocabulary,
                             start with 0, default 0.
       --startcolumn [STARTCOLUMN], -s [STARTCOLUMN]
