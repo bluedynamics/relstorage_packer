@@ -209,6 +209,9 @@ The result is::
     
 Help Text
 =========
+
+::
+
     usage: csv2vdex [-h] [--languages [LANGUAGES]] [--startrow [STARTROW]]
                     [--keycolumn [KEYCOLUMN]] [--startcolumn [STARTCOLUMN]]
                     [--ordered [ORDERED]] [--dialect [DIALECT]]
