@@ -57,7 +57,7 @@ and as tree::
 Get the XML::
 
     >>> print c2v._xml 
-    <vocabulary xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" orderSignificant="true">
+    <vdex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" xsi:schemaLocation="http://www.imsglobal.org/imsvdex_v1p0 imsvdex_v1p0.xsd" profileType="lax" orderSignificant="true">
       <vocabIdentifier>test</vocabIdentifier>
       <vocabName>
         <langstring language="en">TestEn</langstring>
@@ -140,5 +140,5 @@ Get the XML::
           </caption>
         </term>
       </term>
-    </vocabulary>
+    </vdex>
     

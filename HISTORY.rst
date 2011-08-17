@@ -2,6 +2,12 @@
 History
 =======
 
+1.1
+---
+
+- accoridng to IMS Global specification the root tag MUST be ``vdex``.
+  [jensens, 2011-08-17]
+
 1.0.1
 -----
 

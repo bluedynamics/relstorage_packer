@@ -33,7 +33,7 @@ After running through csv2vdex, called like so::
 
 This results it such a VDEX XML::
 
-    <vocabulary xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" orderSignificant="true">
+    <vdex xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" orderSignificant="true">
       <vocabIdentifier>insects</vocabIdentifier>
       <vocabName>
         <langstring language="en">insects</langstring>
@@ -72,7 +72,7 @@ This results it such a VDEX XML::
           <langstring language="it">calabrone</langstring>
         </caption>
       </term>
-    </vocabulary>
+    </vdex>
 
 A tree vocabulary
 -----------------
@@ -121,7 +121,7 @@ After running through csv2vdex, called like so::
     
 The result is::
 
-    <vocabulary xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" orderSignificant="true">
+    <vdex xmlns="http://www.imsglobal.org/xsd/imsvdex_v1p0" orderSignificant="true">
       <vocabIdentifier>beeeurope</vocabIdentifier>
       <vocabName>
         <langstring language="en">European Honey Bees</langstring>
@@ -205,7 +205,7 @@ The result is::
           </caption>
         </term>
       </term>
-    </vocabulary>
+    </vdex>
     
 Help Text
 =========

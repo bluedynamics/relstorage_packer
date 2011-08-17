@@ -3,10 +3,14 @@ from lxml import etree
 from collections import OrderedDict
 
 NSVDEX = 'http://www.imsglobal.org/xsd/imsvdex_v1p0'
-NSMAP = {None: NSVDEX}
+NSXSI  = "http://www.w3.org/2001/XMLSchema-instance"
+NSMAP = {
+    None: NSVDEX,
+    'xsi': NSXSI
+}
 
-def vtag(tag):
-    return "{%s}%s" % (NSVDEX, tag) 
+def vtag(tag, ns=NSVDEX):
+    return "{%s}%s" % (ns, tag) 
 
 class CSV2VDEX(object):
     
@@ -73,7 +77,10 @@ class CSV2VDEX(object):
     
     @property
     def _xml(self):
-        root = etree.Element(vtag("vocabulary"), nsmap=NSMAP) 
+        root = etree.Element(vtag("vdex"), nsmap=NSMAP)
+        root.attrib[vtag("schemaLocation", ns=NSXSI)] = \
+            "http://www.imsglobal.org/imsvdex_v1p0 imsvdex_v1p0.xsd"
+        root.attrib['profileType'] = 'lax'
         root.attrib['orderSignificant'] = str(self.ordered).lower()
         vid = etree.SubElement(root, vtag('vocabIdentifier'))
         vid.text = self.vid
@@ -100,4 +107,3 @@ class CSV2VDEX(object):
     def __call__(self):
         with open(self.outfile, 'w') as outfile:
             outfile.write(self._xml)        
-            
