@@ -25,6 +25,8 @@ parser.add_argument('--treedelimiter', nargs='?', default='.',
                     help='Delimiter used to split the key the vocabulary into '
                          'a path to determine the position in the tree, '
                          'default dot.')
+parser.add_argument('--encoding', '-e', nargs='?', default='utf-8', 
+                    help='Encoding of input file. Default: utf-8')
 parser.add_argument('id', nargs=1,
                    help='unique identifier of vocabulary')
 parser.add_argument('name', nargs=1, 
@@ -41,4 +43,4 @@ def run():
     api.CSV2VDEX(ns.id[0], ns.name[0], ns.source[0], ns.target[0], 
                  ns.startrow, ns.keycolumn, ns.startcolumn, ns.languages, 
                  ns.dialect, ns.csvdelimiter, ns.treedelimiter, 
-                 ns.ordered)()
+                 ns.ordered, ns.encoding)()

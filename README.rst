@@ -246,6 +246,8 @@ Help Text
                             after this, starts counting with 0, default 1.
       --ordered [ORDERED], -o [ORDERED]
                             Wether vocabulary is ordered or not, Default: True
+      --encoding [ENCODING], -e [ENCODING]
+                            Encoding of input file. Default: utf-8
       --dialect [DIALECT]   CSV dialect, default excel.
       --csvdelimiter [CSVDELIMITER]
                             CSV delimiter of the source file, default colon.

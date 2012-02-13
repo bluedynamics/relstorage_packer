@@ -17,7 +17,7 @@ class CSV2VDEX(object):
     def __init__(self, vid, names, infile, outfile, 
                  startrow=0, colkey=0, colstartvalue=1, langs='en',
                  dialect='excel', delimiter=';', treevocabdelimiter='.',
-                 ordered=True):
+                 ordered=True, encoding='utf-8'):
         self.vid = vid
         if isinstance(langs, basestring):
             langs = [_.strip() for _ in langs.split(',')]
@@ -37,6 +37,7 @@ class CSV2VDEX(object):
             raise ValueError, "given csv dialect '%s' is unknown. " % dialect +\
                               "pick one of theses: %s" % csv.list_dialects() 
         self.dialect = dialect
+        self.encoding = encoding
         
     @property
     def _fields(self):
@@ -71,7 +72,7 @@ class CSV2VDEX(object):
                 if idx < length-1:
                     branch = branch[part][0]
                     continue
-                values = [item[_] for _ in self.langs]
+                values = [item[_].decode(self.encoding) for _ in self.langs]
                 branch[part] = OrderedDict(), values, item['key']
         return tree
     
@@ -106,4 +107,4 @@ class CSV2VDEX(object):
 
     def __call__(self):
         with open(self.outfile, 'w') as outfile:
-            outfile.write(self._xml)        
+            outfile.write(self._xml)
