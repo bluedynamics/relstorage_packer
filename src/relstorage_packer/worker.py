@@ -11,7 +11,7 @@ import psycopg2
 EMTPY_DELAY = 1
 
 log = logging.getLogger("worker")
-log.setLevel(logging.WARNING)
+log.setLevel(logging.INFO)
 
 
 def _get_and_lock_next_zoid(cursor):
