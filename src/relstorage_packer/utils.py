@@ -56,6 +56,10 @@ def _create_queue_table(cursor, drop):
         WHERE taken = false;
     CREATE INDEX %(table)s_taken_true ON %(table)s (taken)
         WHERE taken = true;
+    CREATE INDEX %(table)s_finished_false ON %(table)s (finished)
+        WHERE finished = false;
+    CREATE INDEX %(table)s_finished_true ON %(table)s (finished)
+        WHERE finished = true;
     COMMIT;
     """ % {'table': QUEUE_TABLE_NAME}
     cursor.execute(stmt)
