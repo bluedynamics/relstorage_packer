@@ -69,7 +69,7 @@ def _copy_zoid(cursor, zoid):
     try:
         cursor.execute(stmt)
     except:
-        log.debug("Statement failed: \n%s" % stmt)
+        log.warning("Statement failed: \n%s" % stmt)
         raise
     log.debug("copied zoid=%s" % zoid)
 
@@ -83,12 +83,14 @@ def _handle_references(cursor, zoid):
     cursor.execute(stmt)
     row = cursor.next()
     if not row:
-        log.debug('Can not load state for zoid-%s!' % zoid)
+        log.warning('Can not load state for zoid-%s!' % zoid)
         return
-    refs = get_references(row[0])
-    log.info("handle %s references for zoid=%s" % (len(refs), zoid))
+    refs = set(get_references(row[0]))
+    if not refs:
+        return
+    log.debug("handle %s references for zoid=%s" % (len(refs), zoid))
     stmt = ""
-    for ref_zoid in set(refs):
+    for ref_zoid in refs:
         stmt = """
         INSERT INTO %(qtable)s (zoid)
         SELECT %(zoid)s
@@ -132,18 +134,18 @@ def process_queue(cursor):
         return True
     if zoid is False:
         return False
-    log.info('time: %.2fms get and lock' % ((time.time() - start) * 1000.0))
+    log.debug('time: % 3.2fms get and lock' % ((time.time() - start) * 1000.0))
     cursor.execute('BEGIN;')
     try:
         middle = time.time()
         _copy_zoid(cursor, zoid)
-        log.info('time: %.2fms copy' % ((time.time() - middle) * 1000.0))
+        log.debug('time: % 3.2fms copy' % ((time.time() - middle) * 1000.0))
         middle = time.time()
         _handle_references(cursor, zoid)
-        log.info('time: %.2fms references' % ((time.time() - middle) * 1000.0))
+        log.debug('time: % 3.2fms refs' % ((time.time() - middle) * 1000.0))
         middle = time.time()
         _finish_zoid(cursor, zoid)
-        log.info('time: %.2fms finish' % ((time.time() - middle) * 1000.0))
+        log.debug('time: % 3.2fms finish' % ((time.time() - middle) * 1000.0))
     except KeyboardInterrupt:
         # conflict - unlock
         cursor.execute('ABORT;')
@@ -155,7 +157,7 @@ def process_queue(cursor):
         log.warning(80 * '-' + '\nAbort for unknown reason, wait some millis.')
         time.sleep(0.1)
         return True
-    log.info('processed item %s in %.2fms\n--------------------------' %
+    log.info('processed item %s in % 3.2fms' %
               (zoid, (time.time() - start) * 1000.0))
     return True
 
