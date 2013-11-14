@@ -64,7 +64,8 @@ def _copy_zoid(cursor, zoid):
         AND NOT EXISTS (
             SELECT zoid FROM %(table)s
             WHERE zoid = %(zoid)s
-        )
+        );
+    COMMIT;
     """ % {'table': TARGET_TABLE_NAME, 'zoid': zoid}
     try:
         cursor.execute(stmt)
@@ -98,6 +99,7 @@ def _handle_references(cursor, zoid):
             SELECT zoid FROM %(qtable)s
             WHERE zoid = %(zoid)s
         );
+        COMMIT;
         """ % {'qtable': QUEUE_TABLE_NAME,
                'ttable': TARGET_TABLE_NAME,
                'zoid': ref_zoid
