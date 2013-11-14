@@ -5,6 +5,8 @@ import ZConfig
 from ZODB.serialize import referencesf
 from ZODB.utils import u64
 
+log = logging.getLogger("utils")
+
 schema_xml = """
 <schema>
   <import package="ZODB"/>
@@ -30,52 +32,82 @@ def dbop(storage, func, *args, **kwargs):
 def _create_queue_table(cursor, drop):
     cursor.execute('BEGIN;')
     if drop:
-        logging.info('Dropping existing queue table.')
+        log.info('Dropping existing queue table.')
         cursor.execute("DROP TABLE IF EXISTS %s;" % QUEUE_TABLE_NAME)
+        log.debug('DROPPED')
     else:
         stmt = "SELECT * FROM pg_tables WHERE tablename='%s';" % \
                QUEUE_TABLE_NAME
         cursor.execute(stmt)
         if bool(cursor.rowcount):
-            logging.info('Keeping existing queue table.')
+            log.info('Keeping existing queue table.')
             return
-    logging.info('Creating queue table.')
+    log.info('Creating queue table.')
     stmt = """
-    CREATE TABLE %s (
-        zoid        BIGINT NOT NULL,
+    CREATE TABLE %(table)s (
+        zoid        BIGINT NOT NULL UNIQUE,
         taken       BOOLEAN NOT NULL DEFAULT FALSE,
         timestamp   TIMESTAMP,
+        finished    BOOLEAN NOT NULL DEFAULT FALSE,
         counter     bigserial primary key
     );
-    """ % QUEUE_TABLE_NAME
+    CREATE INDEX %(table)s_zoid ON %(table)s (zoid);
+    CREATE INDEX %(table)s_taken_false ON %(table)s (taken)
+        WHERE taken = false;
+    CREATE INDEX %(table)s_taken_true ON %(table)s (taken)
+        WHERE taken = true;
+    COMMIT;
+    """ % {'table': QUEUE_TABLE_NAME}
     cursor.execute(stmt)
-    cursor.execute('COMMIT;')
 
 
 def _create_target_table(cursor, drop):
     cursor.execute('BEGIN;')
     if drop:
-        logging.info('Dropping existing target table.')
-        cursor.execute("DROP TABLE IF EXISTS %s;" % TARGET_TABLE_NAME)
+        log.info('Dropping existing target table.')
+        stmt = """
+        DROP TABLE IF EXISTS %(ttable)s_blob_chunk CASCADE;
+        DROP TABLE IF EXISTS %(ttable)s CASCADE;
+        COMMIT;
+        """ % {'ttable': TARGET_TABLE_NAME}
+        cursor.execute(stmt)
     else:
         stmt = "SELECT * FROM pg_tables WHERE tablename='%s';" % \
                TARGET_TABLE_NAME
         cursor.execute(stmt)
         if bool(cursor.rowcount):
-            logging.info('Keeping existing target table.')
+            log.info('Keeping existing target table.')
             return
-    logging.info('Creating target table.')
+    log.info('Creating target table.')
     stmt = """
-    CREATE TABLE %s (
+    CREATE TABLE %(ttable)s (
         zoid        BIGINT NOT NULL PRIMARY KEY,
         tid         BIGINT NOT NULL CHECK (tid > 0),
         state_size  BIGINT NOT NULL CHECK (state_size >= 0),
         state       BYTEA
     );
-    CREATE INDEX %s_tid ON %s (tid);
-    """ % (TARGET_TABLE_NAME, TARGET_TABLE_NAME, TARGET_TABLE_NAME)
+    CREATE INDEX %(ttable)s_tid ON %(ttable)s (tid);
+
+
+
+    CREATE TABLE %(ttable)s_blob_chunk (
+        zoid        BIGINT NOT NULL,
+        chunk_num   BIGINT NOT NULL,
+                    PRIMARY KEY (zoid, chunk_num),
+        tid         BIGINT NOT NULL,
+        chunk       OID NOT NULL
+    );
+    CREATE INDEX %(ttable)s_blob_chunk_lookup ON %(ttable)s_blob_chunk (zoid);
+    CREATE INDEX %(ttable)s_blob_chunk_loid ON %(ttable)s_blob_chunk (chunk);
+    ALTER TABLE %(ttable)s_blob_chunk ADD CONSTRAINT %(ttable)s_blob_chunk_fk
+        FOREIGN KEY (zoid)
+        REFERENCES %(ttable)s (zoid)
+        ON DELETE CASCADE;
+
+    COMMIT;
+    """ % {'ttable': TARGET_TABLE_NAME}
+    log.debug(stmt)
     cursor.execute(stmt)
-    cursor.execute('COMMIT;')
 
 
 def get_storage(argv, description, is_master=False):
@@ -108,9 +140,9 @@ def get_storage(argv, description, is_master=False):
         raise RuntimeError('Packing does not support history keeping storages')
     name = '%s (%s)' % ((connection.name or 'storage'),
                         connection.__class__.__name__)
-    logging.info("Opening %s...", name)
+    log.info("Opening %s...", name)
     storage = connection.open()
-    logging.info("Successfully openend %s", storage.getName())
+    log.info("Successfully openend %s", storage.getName())
     if 'PostgreSQLAdapter' not in storage.getName():
         raise RuntimeError('Only PostgreSQL databases are supported')
     if is_master:
@@ -127,4 +159,5 @@ def get_references(state):
             refs.add(u64(oid))
     return refs
 
+    
 
