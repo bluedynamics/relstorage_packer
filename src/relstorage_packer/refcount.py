@@ -179,7 +179,7 @@ def run(argv=sys.argv):
                 tid_ratio = processed_tids / float(overall_tids) * 100
                 tid_todo = overall_tids - processed_tids
                 tid_rate = processed_tids / (time.time() - start)
-                time_left = (time.time() - start) * ((100 - tid_ratio) / 100)
+                time_left = ((time.time() - start) / processed_tids) * tid_todo
                 time_left = datetime.timedelta(seconds=time_left)
                 eta = datetime.datetime.now() + time_left
                 log.info(
