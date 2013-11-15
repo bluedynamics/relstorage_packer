@@ -162,6 +162,7 @@ def run(argv=sys.argv):
     start = logtime = time.time()
     try:
         init_tid = tid = dbop(storage, tid_boundary)
+        overall_tids = dbop(storage, changed_tids_len, init_tid)
         processed_tids_offset = 0
         while True:
             tid = dbop(storage, next_tid, tid)
@@ -172,7 +173,6 @@ def run(argv=sys.argv):
             if time.time() - logtime > 1:
                 # calc/print some stats
                 period = time.time() - logtime
-                overall_tids = dbop(storage, changed_tids_len, init_tid)
                 duration = datetime.timedelta(seconds=time.time() - start)
                 tid_delta_period = processed_tids - processed_tids_offset
                 tid_rate_period = tid_delta_period / period
