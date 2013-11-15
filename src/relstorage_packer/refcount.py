@@ -1,6 +1,7 @@
 """relstorage_packer - reference counter process"""
 import datetime
 import logging
+import optparse
 import sys
 import time
 from .utils import dbop
@@ -103,7 +104,7 @@ def handle_transaction(conn, cursor, tid):
             # import ipdb; ipdb.set_trace()
             _add_ref(cursor, tid, source_zoid, target_zoid)
         _insert_empty_zoid(cursor, tid, source_zoid)
-        conn.commit()
+    conn.commit()
 
 
 def _add_ref(cursor, tid, source_zoid, target_zoid):
@@ -147,18 +148,32 @@ def changed_tids_len(conn, cursor, tid):
     (count,) = cursor.next()
     return count or 0
 
+
 def run(argv=sys.argv):
     log.info("Initiating packing.")
-    storage = get_storage(argv, __doc__, True)
+
+    parser = optparse.OptionParser(
+        description='Fast ZODB Relstorage Packer for history free PostgreSQL',
+        usage="%prog config_file"
+    )
+    parser.add_option(
+        "--init", dest="initialize", default=False,
+        action="store_true",
+        help="Removes all reference counts and starts from scratch.",
+    )
+    options, args = parser.parse_args(argv[1:])
+    if len(args) != 1:
+        parser.error("The name of one configuration file is required.")
+    storage = get_storage(args[0])
     dbop(storage, aquire_counter_lock)
-    if storage.master_initialize:
+    if options.initialize:
         try:
             dbop(storage, init_table)
         except:
             dbop(storage, release_counter_lock)
             storage.close()
             raise
-    processed_tids = 0    
+    processed_tids = 0
     start = logtime = time.time()
     try:
         init_tid = tid = dbop(storage, tid_boundary)
@@ -187,7 +202,7 @@ def run(argv=sys.argv):
                     '%s time | '
                     '%s eta (%s) | '
                     '%d '
-                    '(%.2f%%) done | '
+                    '(%.3f%%) done | '
                     '%d todo | '
                     '%d all | '
                     '%d t/s | '
@@ -217,5 +232,5 @@ def run(argv=sys.argv):
             (str(datetime.timedelta(seconds=processing_time)), processing_time)
         )
     else:
-        log.info("Finihsed, there was nothing to do.")
+        log.info("Finished, there was nothing to do.")
     dbop(storage, release_counter_lock)

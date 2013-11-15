@@ -3,7 +3,7 @@ import os
 
 version = '1.2'
 shortdesc = \
-'Packs a PostgreSQL RelStorage for ZODB.'
+'Packs a History Free PostgreSQL RelStorage for ZODB.'
 longdesc = open(os.path.join(os.path.dirname(__file__), 'README.rst')).read()
 longdesc += open(os.path.join(os.path.dirname(__file__), 'HISTORY.rst')).read()
 longdesc += open(os.path.join(os.path.dirname(__file__), 'LICENSE.rst')).read()
@@ -23,7 +23,7 @@ setup(
     keywords='vdex csv converter xml ims vocabulary',
     author='BlueDynamics Alliance',
     author_email='dev@bluedynamics.com',
-    url="http://github.com/bluedynamics/vdexcsv",
+    url="http://github.com/bluedynamics/relstorage_packer",
     license='Simplified BSD',
     packages=find_packages('src'),
     package_dir={'': 'src'},
@@ -39,9 +39,7 @@ setup(
     ),
     entry_points={
       'console_scripts': [
-          'pack_master = relstorage_packer.master:run',
-          'pack_worker = relstorage_packer.worker:run',
-          'pack_count = relstorage_packer.refcount:run',
+          'relstorage_packpg = relstorage_packer.refcount:run',
       ],
     },
 )
