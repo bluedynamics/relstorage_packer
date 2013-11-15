@@ -183,7 +183,7 @@ def run(argv=sys.argv):
                 time_left = datetime.timedelta(seconds=time_left)
                 eta = datetime.datetime.now() + time_left
                 log.info(
-                    'Stats tids: '
+                    '\nStats tids: '
                     '%s time | '
                     '%s eta (%s) | '
                     '%d '
