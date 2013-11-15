@@ -40,7 +40,8 @@ setup(
     entry_points={
       'console_scripts': [
           'pack_master = relstorage_packer.master:run',
-          'pack_worker = relstorage_packer.worker:run'
+          'pack_worker = relstorage_packer.worker:run',
+          'pack_count = relstorage_packer.refcount:run',
       ],
     },
 )

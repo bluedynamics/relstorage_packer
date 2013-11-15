@@ -26,7 +26,10 @@ def dbop(storage, func, *args, **kwargs):
     def func_wo_conn(conn, cursor, *args, **kwargs):
         return func(cursor, *args, **kwargs)
 
-    return storage._with_store(func_wo_conn, *args, **kwargs)
+    def func_conn(conn, cursor, *args, **kwargs):
+        return func(conn, cursor, *args, **kwargs)
+
+    return storage._with_store(func_conn, *args, **kwargs)
 
 
 def _create_queue_table(cursor, drop):
@@ -44,24 +47,34 @@ def _create_queue_table(cursor, drop):
             return
     log.info('Creating queue table.')
     stmt = """
-    CREATE TABLE %(table)s (
+    CREATE TABLE %(qtable)s (
         zoid        BIGINT NOT NULL UNIQUE,
         taken       BOOLEAN NOT NULL DEFAULT FALSE,
         timestamp   TIMESTAMP,
         finished    BOOLEAN NOT NULL DEFAULT FALSE,
         counter     bigserial primary key
     );
-    CREATE INDEX %(table)s_zoid ON %(table)s (zoid);
-    CREATE INDEX %(table)s_taken_false ON %(table)s (taken)
+    CREATE INDEX %(qtable)s_zoid ON %(qtable)s (zoid);
+    CREATE INDEX %(qtable)s_taken_false ON %(qtable)s (taken)
         WHERE taken = false;
-    CREATE INDEX %(table)s_taken_true ON %(table)s (taken)
+    CREATE INDEX %(qtable)s_taken_true ON %(qtable)s (taken)
         WHERE taken = true;
-    CREATE INDEX %(table)s_finished_false ON %(table)s (finished)
+    CREATE INDEX %(qtable)s_finished_false ON %(qtable)s (finished)
         WHERE finished = false;
-    CREATE INDEX %(table)s_finished_true ON %(table)s (finished)
+    CREATE INDEX %(qtable)s_finished_true ON %(qtable)s (finished)
         WHERE finished = true;
+
+    CREATE FUNCTION COPYZOID(zoid bigint) RETURNS setof void as $$
+    DECLARE
+    BEGIN
+        RETURN;
+    END;
+    $$ LANGUAGE plpgsql;
+
     COMMIT;
-    """ % {'table': QUEUE_TABLE_NAME}
+
+
+    """ % {'qtable': QUEUE_TABLE_NAME, 'ttable': TARGET_TABLE_NAME}
     cursor.execute(stmt)
 
 
@@ -151,8 +164,8 @@ def get_storage(argv, description, is_master=False):
         raise RuntimeError('Only PostgreSQL databases are supported')
     if is_master:
         setattr(storage, 'master_initialize', master_initialize)
-    dbop(storage, _create_queue_table, master_initialize)
-    dbop(storage, _create_target_table, master_initialize)
+    # dbop(storage, _create_queue_table, master_initialize)
+    # dbop(storage, _create_target_table, master_initialize)
     return storage
 
 def get_references(state):

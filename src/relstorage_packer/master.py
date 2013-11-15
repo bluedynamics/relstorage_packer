@@ -126,6 +126,8 @@ def run(argv=sys.argv):
     dbop(storage, aquire_master_lock)
     if storage.master_initialize:
         try:
+            dbop(storage, _create_queue_table, storage.master_initialize)
+            dbop(storage, _create_target_table, storage.master_initialize)
             dbop(storage, queue_root)
         except:
             dbop(storage, release_master_lock)

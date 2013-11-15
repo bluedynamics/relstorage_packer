@@ -10,13 +10,11 @@ develop-eggs/
 .installed.cfg
 *.pyc
 *.pyo
-src/
 *~
 .pydevproject
 .project
 var/
 .DS_Store
-*#*
 .mr.developer.cfg
 devsrc/
 dist/
