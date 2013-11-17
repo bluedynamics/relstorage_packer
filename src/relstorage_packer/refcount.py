@@ -7,7 +7,6 @@ import time
 from .utils import dbop
 from .utils import get_references
 from .utils import get_storage
-from bzrlib import initialize
 
 WAIT_DELAY = 1
 
