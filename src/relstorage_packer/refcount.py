@@ -11,7 +11,7 @@ from .utils import get_storage
 WAIT_DELAY = 1
 
 log = logging.getLogger("refcount")
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 def aquire_counter_lock(conn, cursor):
@@ -33,31 +33,34 @@ def release_counter_lock(conn, cursor):
 
 
 def init_table(conn, cursor):
-    log.info("Create table object_refcount (drop existing).")
+    log.info("Create table object_inrefs (drop existing).")
     stmt = """
-    DROP TABLE IF EXISTS object_refcount;
-    CREATE TABLE object_refcount (
-        zoid       BIGINT NOT NULL UNIQUE,
+    DROP TABLE IF EXISTS object_inrefs;
+    CREATE TABLE object_inrefs (
+        zoid       BIGINT NOT NULL,
         tid        BIGINT NOT NULL CHECK (tid > 0),
-        refs       BIGINT[] NOT NULL DEFAULT ARRAY[]::integer[]
+        inref      BIGINT,
+        PRIMARY KEY(zoid, inref)
     );
-    CREATE INDEX object_refcount_tid ON object_refcount (tid);
-    CREATE INDEX object_refcount_refs ON object_refcount (refs);
-    INSERT INTO object_refcount VALUES(1, 1);
+    CREATE INDEX object_inrefs_tid  ON object_inrefs (tid);
+    CREATE INDEX object_inrefs_refs ON object_inrefs (inref);
+
+    INSERT INTO object_inrefs VALUES(0, 1, 0);
+    INSERT INTO object_inrefs VALUES(0, 1, -1);
     """
     cursor.execute(stmt)
     conn.commit()
 
 
 def tid_boundary(conn, cursor):
-    """get the latest handled tid from object_refcount or 0 if table is empty
+    """get the latest handled tid from object_inrefs or 0 if table is empty
 
     attention: the latest tid maybe processed incomplete after a prior run
     was stopped. so the latest tid need to get processed again with zoid/ tid
-    combinations not present in object_refcount!
+    combinations not present in object_inrefs!
     """
     stmt = """
-    SELECT DISTINCT tid FROM object_refcount ORDER BY tid DESC LIMIT 1;
+    SELECT DISTINCT tid FROM object_inrefs ORDER BY tid DESC LIMIT 1;
     """
     cursor.execute(stmt)
     if not cursor.rowcount:
@@ -85,9 +88,72 @@ def next_tid(conn, cursor, lasttid):
     return tid
 
 
-def handle_transaction(conn, cursor, tid):
+def _add_ref(cursor, tid, source_zoid, target_zoid):
+    """insert an entry to the refcount table or update tid on existing
+    """
+    stmt = """
+    INSERT
+        INTO object_inrefs (zoid, tid, inref)
+        SELECT %(target_zoid)d, %(tid)d, %(source_zoid)d
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM object_inrefs
+            WHERE
+                zoid = %(target_zoid)d
+                AND inref = %(source_zoid)d
+        )
+    ;
+    UPDATE object_inrefs
+        SET tid=%(tid)d
+        WHERE
+            zoid=%(target_zoid)d
+            AND inref = %(source_zoid)d
+    ;
+    """ % {'source_zoid': source_zoid, 'target_zoid': target_zoid, 'tid': tid}
+    cursor.execute(stmt)
+
+
+def _insert_empty_zoid(cursor, tid, zoid):
+    """Insert zoid if not already there in a pg-cheap way
+    its a self-reference, so objects without any incoming refs are represented
+    with one entry, the self-reference where zoid=inref.
+    """
+    stmt = """
+    INSERT
+       INTO object_inrefs (zoid, tid, inref)
+       SELECT %(zoid)d, %(tid)d, %(zoid)d
+       WHERE NOT EXISTS (
+           SELECT 1
+           FROM object_inrefs
+           WHERE zoid=%(zoid)d
+           AND inref=%(zoid)d
+        );
+    """ % {'zoid': zoid, 'tid': tid}
+    cursor.execute(stmt)
+
+
+def _check_removed_refs(cursor, source_zoid, target_zoids):
+    # remove all row in object_inrefs where source_zoid is in refs and
+    # object_inrefs.zoid is not in target_zoids
+    if target_zoids:
+        stmt = """
+        DELETE FROM object_inrefs
+        WHERE inref = %(source_zoid)s
+        AND zoid NOT IN (%(target_zoids)s);
+        """ % {'source_zoid': source_zoid,
+               'target_zoids': ', '.join([str(_) for _ in target_zoids])}
+    else:
+        stmt = """
+        DELETE FROM object_inrefs
+        WHERE inref = %(source_zoid)s
+        """ % {'source_zoid': source_zoid}
+    cursor.execute(stmt)
+
+
+def handle_transaction(conn, cursor, tid, initialize):
     log.debug('handle transaction %d' % tid)
     stmt = """
+    BEGIN;
     SELECT zoid, state
     FROM object_state
     WHERE tid = %d
@@ -103,43 +169,57 @@ def handle_transaction(conn, cursor, tid):
             log.debug('   -> process reference to %s' % target_zoid)
             # import ipdb; ipdb.set_trace()
             _add_ref(cursor, tid, source_zoid, target_zoid)
+        if not initialize:
+            _check_removed_refs(cursor, source_zoid, target_zoids)
         _insert_empty_zoid(cursor, tid, source_zoid)
+
+    # commit whole handled tid, so we are sure to have it complete in counters
+    # funny part: this is twice as fast than commit per source_zoid!
     conn.commit()
 
 
-def _add_ref(cursor, tid, source_zoid, target_zoid):
+def _get_orphaned_zoid(cursor):
     stmt = """
-    UPDATE object_refcount
-    SET tid=%(tid)d, refs=refs || %(source_zoid)d::bigint
-    WHERE zoid=%(target_zoid)d
-    AND %(source_zoid)d <> ALL(refs);
+    SELECT zoid
+    FROM object_inrefs
+    GROUP BY zoid
+    HAVING count(inref) = 1
+    ORDER BY zoid;
+    """
+    cursor.execute(stmt)
+    if not cursor.rowcount:
+        return None
+    (zoid,) = cursor.fetchone()
+    log.debug("selected orphaned object: zoid=%d" % zoid)
+    return zoid
 
-    INSERT INTO object_refcount (zoid, tid, refs)
-       SELECT %(target_zoid)d, %(tid)d, ARRAY[%(source_zoid)d]
-       WHERE NOT EXISTS (
-           SELECT 1
-           FROM object_refcount
-           WHERE zoid=%(target_zoid)d
-        );
-    """ % {'source_zoid': source_zoid, 'target_zoid': target_zoid, 'tid': tid}
+
+def _remove_zoid(cursor, zoid):
+    """
+    remove a zoid completly.
+    - remove blobs
+    - remove all references in object_inrefs (this includes self reference)
+    - remove entry in object_state
+    """
+    # TODO : remove blobs
+    stmt = """
+    DELETE FROM object_inrefs
+    WHERE inref = %(zoid)s;
+
+    DELETE FROM object_state
+    WHERE zoid =  %(zoid)s;
+    """ % {'zoid': zoid}
     cursor.execute(stmt)
 
 
-def _check_removed_refs(cursor, tid, source_zoid, target_zoids):
-    pass
-
-
-def _insert_empty_zoid(cursor, tid, zoid):
-    stmt = """
-    INSERT INTO object_refcount (zoid, tid)
-       SELECT %(zoid)d, %(tid)d
-       WHERE NOT EXISTS (
-           SELECT 1
-           FROM object_refcount
-           WHERE zoid=%(zoid)d
-        );
-    """ % {'zoid': zoid, 'tid': tid}
-    cursor.execute(stmt)
+def remove_orphans(conn, cursor):
+    while True:
+        zoid = _get_orphaned_zoid(cursor)
+        if zoid is None:
+            break
+        log.debug('Remove orphaned with zoid=%s' % zoid)
+        _remove_zoid(cursor, zoid)
+        conn.commit()
 
 
 def changed_tids_len(conn, cursor, tid):
@@ -183,7 +263,12 @@ def run(argv=sys.argv):
             tid = dbop(storage, next_tid, tid)
             if not tid:
                 break
-            dbop(storage, handle_transaction, tid)
+            dbop(
+                storage,
+                handle_transaction,
+                tid,
+                initialize=options.initialize
+            )
             processed_tids += 1
             if time.time() - logtime > 1:
                 # calc/print some stats
@@ -220,15 +305,27 @@ def run(argv=sys.argv):
                 )
                 logtime = time.time()
                 processed_tids_offset = processed_tids
-    except:
-        log.error('Failed.')
+        processing_time = time.time() - start
+        log.info(
+            'Finished analyzation phase after %s (%.2fs)' %
+            (str(datetime.timedelta(seconds=processing_time)), processing_time)
+        )
+        cleanup_start = time.time()
+        dbop(storage, remove_orphans)
+        processing_time = time.time() - cleanup_start
+        log.info(
+            'Finished cleanup phase after %s (%.2fs)' %
+            (str(datetime.timedelta(seconds=processing_time)), processing_time)
+        )
+    except Exception, e:
+        log.error(e.message)
         dbop(storage, release_counter_lock)
         storage.close()
-        raise
+        exit(1)
     if processed_tids:
         processing_time = time.time() - start
         log.info(
-            "Finished, processed in %s (%.2fs)" %
+            "Finished, all processed in %s (%.2fs)" %
             (str(datetime.timedelta(seconds=processing_time)), processing_time)
         )
     else:
