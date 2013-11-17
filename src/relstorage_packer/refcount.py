@@ -7,6 +7,7 @@ import time
 from .utils import dbop
 from .utils import get_references
 from .utils import get_storage
+from bzrlib import initialize
 
 WAIT_DELAY = 1
 
@@ -257,8 +258,11 @@ def run(argv=sys.argv):
     start = logtime = time.time()
     try:
         init_tid = tid = dbop(storage, tid_boundary)
+        log.info('Fetching number of all transactions from database...')
         overall_tids = dbop(storage, changed_tids_len, init_tid)
+        log.info('Found %d transactions in database.' % overall_tids)
         processed_tids_offset = 0
+        initialize = options.initialize
         while True:
             tid = dbop(storage, next_tid, tid)
             if not tid:
@@ -267,7 +271,7 @@ def run(argv=sys.argv):
                 storage,
                 handle_transaction,
                 tid,
-                initialize=options.initialize
+                initialize=initialize
             )
             processed_tids += 1
             if time.time() - logtime > 1:
@@ -283,18 +287,18 @@ def run(argv=sys.argv):
                 time_left = datetime.timedelta(seconds=time_left)
                 eta = datetime.datetime.now() + time_left
                 log.info(
-                    '\nStats tids: '
-                    '%s time | '
-                    '%s eta (%s) | '
+                    'Stats tids: '
+                    '%s used | '
+                    '%s eta (in %s) | '
                     '%d '
                     '(%.3f%%) done | '
                     '%d todo | '
                     '%d all | '
                     '%d t/s | '
                     '%d t/delta' % (
-                        str(duration),
-                        str(eta),
-                        str(time_left),
+                        str(duration).rsplit('.', 1)[0],
+                        eta.strftime('%Y-%m-%d %H:%M'),
+                        str(time_left).rsplit('.', 1)[0],
                         processed_tids,
                         tid_ratio,
                         tid_todo,
