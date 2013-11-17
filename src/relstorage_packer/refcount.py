@@ -2,11 +2,14 @@
 import datetime
 import logging
 import optparse
+import os
+import shutil
 import sys
 import time
 from .utils import dbop
 from .utils import get_references
 from .utils import get_storage
+from ZODB.utils import p64
 
 WAIT_DELAY = 1
 
@@ -179,7 +182,7 @@ def handle_transaction(conn, cursor, tid, initialize):
     conn.commit()
 
 
-def _get_orphaned_zoid(cursor):
+def _get_orphaned_zoid(conn, cursor):
     stmt = """
     SELECT zoid
     FROM object_inrefs
@@ -195,14 +198,23 @@ def _get_orphaned_zoid(cursor):
     return zoid
 
 
-def _remove_zoid(cursor, zoid):
+def _remove_blob(storage, zoid):
+    fshelper = storage.blobhelper.fshelper
+    blobpath = fshelper.getPathForOID(p64(zoid))
+    log.debug('Blobs for zoid=%s are at %s' % (zoid, blobpath))
+    if not os.path.exists(blobpath):
+        log.debug('Nothing to remove')
+        return
+    log.debug('!!!!!!!!!!!!!!!!!!Remove blobs')
+    shutil.rmtree(blobpath)
+
+
+def _remove_zoid(conn, cursor, zoid):
     """
     remove a zoid completly.
-    - remove blobs
     - remove all references in object_inrefs (this includes self reference)
     - remove entry in object_state
     """
-    # TODO : remove blobs
     stmt = """
     DELETE FROM object_inrefs
     WHERE inref = %(zoid)s;
@@ -211,16 +223,17 @@ def _remove_zoid(cursor, zoid):
     WHERE zoid =  %(zoid)s;
     """ % {'zoid': zoid}
     cursor.execute(stmt)
+    conn.commit()
 
 
-def remove_orphans(conn, cursor):
+def remove_orphans(storage):
     while True:
-        zoid = _get_orphaned_zoid(cursor)
+        zoid = dbop(storage, _get_orphaned_zoid)
         if zoid is None:
             break
         log.debug('Remove orphaned with zoid=%s' % zoid)
-        _remove_zoid(cursor, zoid)
-        conn.commit()
+        _remove_blob(storage, zoid)
+        dbop(storage, _remove_zoid, zoid)
 
 
 def changed_tids_len(conn, cursor, tid):
@@ -238,15 +251,22 @@ def run(argv=sys.argv):
         usage="%prog config_file"
     )
     parser.add_option(
-        "--init", dest="initialize", default=False,
+        "-i", "--init", dest="initialize", default=False,
         action="store_true",
         help="Removes all reference counts and starts from scratch.",
+    )
+    parser.add_option(
+        "-v", "--verbose", dest="verbose", default=False,
+        action="store_true",
+        help="More verbose output, includes debug messages.",
     )
     options, args = parser.parse_args(argv[1:])
     if len(args) != 1:
         parser.error("The name of one configuration file is required.")
     storage = get_storage(args[0])
     dbop(storage, aquire_counter_lock)
+    if options.verbose:
+        log.setLevel(logging.DEBUG)
     if options.initialize:
         try:
             dbop(storage, init_table)
@@ -315,7 +335,7 @@ def run(argv=sys.argv):
             (str(datetime.timedelta(seconds=processing_time)), processing_time)
         )
         cleanup_start = time.time()
-        dbop(storage, remove_orphans)
+        remove_orphans(storage)
         processing_time = time.time() - cleanup_start
         log.info(
             'Finished cleanup phase after %s (%.2fs)' %
