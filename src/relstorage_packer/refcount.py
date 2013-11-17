@@ -114,7 +114,7 @@ def _add_ref(cursor, tid, source_zoid, target_zoid):
 
 
 def _insert_empty_zoid(cursor, tid, zoid):
-    """Insert zoid if not already there in a pg-cheap way
+    """Insert zoid if not already there in a pg-cheap way.
     its a self-reference, so objects without any incoming refs are represented
     with one entry, the self-reference where zoid=inref.
     """
@@ -133,8 +133,9 @@ def _insert_empty_zoid(cursor, tid, zoid):
 
 
 def _check_removed_refs(cursor, source_zoid, target_zoids):
-    # remove all row in object_inrefs where source_zoid is in refs and
-    # object_inrefs.zoid is not in target_zoids
+    """remove all row in object_inrefs where source_zoid is in refs and
+    object_inrefs.zoid is not in target_zoids
+    """
     if target_zoids:
         stmt = """
         DELETE FROM object_inrefs
@@ -287,14 +288,14 @@ def run(argv=sys.argv):
                 eta = datetime.datetime.now() + time_left
                 log.info(
                     'Stats tids: '
-                    '%s used | '
+                    '%s running | '
                     '%s eta (in %s) | '
                     '%d '
                     '(%.3f%%) done | '
                     '%d todo | '
                     '%d all | '
-                    '%d t/s | '
-                    '%d t/delta' % (
+                    '%.1f t/s | '
+                    '%.1f t/delta' % (
                         str(duration).rsplit('.', 1)[0],
                         eta.strftime('%Y-%m-%d %H:%M'),
                         str(time_left).rsplit('.', 1)[0],
@@ -328,9 +329,12 @@ def run(argv=sys.argv):
     if processed_tids:
         processing_time = time.time() - start
         log.info(
-            "Finished, all processed in %s (%.2fs)" %
-            (str(datetime.timedelta(seconds=processing_time)), processing_time)
+            "Completed: processed %s transaction in %s-mode in %s (%.2fs) " %
+            (processed_tids,
+             'init' if options.initialize else 'update',
+             str(datetime.timedelta(seconds=processing_time)),
+             processing_time)
         )
     else:
-        log.info("Finished, there was nothing to do.")
+        log.info("Completed, there was nothing to do.")
     dbop(storage, release_counter_lock)
