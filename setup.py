@@ -39,7 +39,7 @@ setup(
     ),
     entry_points={
       'console_scripts': [
-          'relstorage_packpg = relstorage_packer.refcount:run',
+          'relstorage_pack = relstorage_packer.refcount:run',
       ],
     },
 )
