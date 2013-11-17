@@ -307,20 +307,18 @@ def run(argv=sys.argv):
                 time_left = datetime.timedelta(seconds=time_left)
                 eta = datetime.datetime.now() + time_left
                 log.info(
-                    'Stats tids: '
-                    '%s running | '
+                    'Processed %.3f%% | '
+                    '%s elapsed | '
                     '%s eta (in %s) | '
-                    '%d '
-                    '(%.3f%%) done | '
-                    '%d todo | '
-                    '%d all | '
+                    '%d done | '
+                    '%d of %d left | '
                     '%.1f t/s | '
                     '%.1f t/delta' % (
+                        tid_ratio,
                         str(duration).rsplit('.', 1)[0],
                         eta.strftime('%Y-%m-%d %H:%M'),
                         str(time_left).rsplit('.', 1)[0],
                         processed_tids,
-                        tid_ratio,
                         tid_todo,
                         overall_tids,
                         tid_rate,
