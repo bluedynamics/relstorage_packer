@@ -11,7 +11,7 @@ from .utils import get_storage
 WAIT_DELAY = 1
 
 log = logging.getLogger("refcount")
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 def aquire_counter_lock(conn, cursor):
