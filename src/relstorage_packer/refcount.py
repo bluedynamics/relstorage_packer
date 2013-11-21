@@ -57,10 +57,6 @@ def init_table(conn, cursor):
 
 def tid_boundary(conn, cursor):
     """get the latest handled tid from object_inrefs or 0 if table is empty
-
-    attention: the latest tid maybe processed incomplete after a prior run
-    was stopped. so the latest tid need to get processed again with zoid/ tid
-    combinations not present in object_inrefs!
     """
     stmt = """
     SELECT DISTINCT tid FROM object_inrefs ORDER BY tid DESC LIMIT 1;
