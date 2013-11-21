@@ -70,7 +70,7 @@ def tid_boundary(conn, cursor):
 
 
 def next_tid(conn, cursor, lasttid):
-    """generator iterating over distinct tids
+    """get next higher tid after given lasttid
     """
     stmt = """
     SELECT DISTINCT tid
@@ -132,7 +132,7 @@ def _insert_empty_zoid(cursor, tid, zoid):
 
 
 def _check_removed_refs(cursor, source_zoid, target_zoids):
-    """remove all row in object_inrefs where source_zoid is in refs and
+    """remove all rows in object_inrefs where source_zoid is in refs and
     object_inrefs.zoid is not in target_zoids
     """
     if target_zoids:
@@ -151,6 +151,8 @@ def _check_removed_refs(cursor, source_zoid, target_zoids):
 
 
 def handle_transaction(conn, cursor, tid, initialize):
+    """analyze a given transaction and fill inverse references
+    """
     log.debug('handle transaction %d' % tid)
     stmt = """
     BEGIN;
@@ -199,9 +201,9 @@ def _remove_blob(storage, zoid):
     blobpath = fshelper.getPathForOID(p64(zoid))
     log.debug('Blobs for zoid=%s are at %s' % (zoid, blobpath))
     if not os.path.exists(blobpath):
-        log.debug('Nothing to remove')
+        log.debug('-> Nothing to remove')
         return
-    log.debug('!!!!!!!!!!!!!!!!!!Remove blobs')
+    log.debug('-> Remove blobs')
     shutil.rmtree(blobpath)
 
 
