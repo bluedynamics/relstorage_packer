@@ -244,8 +244,6 @@ def changed_tids_len(conn, cursor, tid):
 
 
 def run(argv=sys.argv):
-    log.info("Initiating packing.")
-
     parser = optparse.OptionParser(
         description='Fast ZODB Relstorage Packer for history free PostgreSQL',
         usage="%prog config_file"
@@ -263,10 +261,15 @@ def run(argv=sys.argv):
     options, args = parser.parse_args(argv[1:])
     if len(args) != 1:
         parser.error("The name of one configuration file is required.")
-    storage = get_storage(args[0])
-    dbop(storage, aquire_counter_lock)
     if options.verbose:
         log.setLevel(logging.DEBUG)
+        log.debug("Logging in verbose mode.")
+
+    log.info("Initiating packing.")
+
+    storage = get_storage(args[0])
+    dbop(storage, aquire_counter_lock)
+
     if options.initialize:
         try:
             dbop(storage, init_table)
