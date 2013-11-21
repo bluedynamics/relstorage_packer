@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-version = '1.2'
+version = '1.0'
 shortdesc = \
 'Packs a History Free PostgreSQL RelStorage for ZODB.'
 longdesc = open(os.path.join(os.path.dirname(__file__), 'README.rst')).read()
@@ -20,10 +20,10 @@ setup(
         'Topic :: Software Development',
         'License :: OSI Approved :: BSD License',
     ],
-    keywords='vdex csv converter xml ims vocabulary',
+    keywords='postgresql zodb pack zope',
     author='BlueDynamics Alliance',
     author_email='dev@bluedynamics.com',
-    url="http://github.com/bluedynamics/relstorage_packer",
+    url="http://pypi.python.org/pypi/relstorage_packer",
     license='Simplified BSD',
     packages=find_packages('src'),
     package_dir={'': 'src'},
