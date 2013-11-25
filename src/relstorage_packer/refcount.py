@@ -186,7 +186,8 @@ def _get_orphaned_zoid(conn, cursor):
     FROM object_inrefs
     GROUP BY zoid
     HAVING count(inref) = 1
-    ORDER BY zoid;
+    ORDER BY zoid
+    LIMIT 1;
     """
     cursor.execute(stmt)
     if not cursor.rowcount:
@@ -225,6 +226,8 @@ def _remove_zoid(conn, cursor, zoid):
 
 
 def remove_orphans(storage):
+    tick = time.time()
+    count = 0
     while True:
         zoid = dbop(storage, _get_orphaned_zoid)
         if zoid is None:
@@ -232,6 +235,10 @@ def remove_orphans(storage):
         log.debug('Remove orphaned with zoid=%s' % zoid)
         _remove_blob(storage, zoid)
         dbop(storage, _remove_zoid, zoid)
+        count += 1
+        if (time.time() - tick) > 5:
+            log.info('removed %s orphaned objects' % count)
+            tick = time.time()
 
 
 def changed_tids_len(conn, cursor, tid):
