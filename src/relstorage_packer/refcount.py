@@ -159,43 +159,38 @@ def _add_ref(conn, cursor, source_zoid, target_zoid, tid):
 
 
 def _check_removed_refs(cursor, source_zoid, target_zoids):
-    """remove all rows in object_inrefs where source_zoid is in refs and
-    object_inrefs.zoid is not in target_zoids
+    """get all prior filed references of current source_zoid
+       and remove any not valid anymore, in other words if there is an entry in
+       ``object_inrefs`` with inref=source_zoid but its zoid is not in
+       target_zoids, remove it and decrement the counter for zoid.
     """
-    if target_zoids:
-        stmt = """
-        UPDATE object_inrefs
-            SET numinrefs = numinrefs - decrement
-        FROM (
-            SELECT count(*) as decrement
-            FROM object_inrefs
-            WHERE inref = %(source_zoid)s
-            AND zoid NOT IN (%(target_zoids)s)
-        )
-        WHERE zoid NOT IN = %(target_zoid)s
-        AND zoid = inref;
-
-        DELETE FROM object_inrefs
-        WHERE inref = %(source_zoid)s
-        AND zoid NOT IN (%(target_zoids)s);
-        """ % {'source_zoid': source_zoid,
-               'target_zoids': ', '.join([str(_) for _ in target_zoids])}
-    else:
-        stmt = """
-        UPDATE object_inrefs
-            SET numinrefs = numinrefs - decrement
-        FROM (
-            SELECT count(*) as decrement
-            FROM object_inrefs
-            WHERE inref = %(source_zoid)s
-        )
-        WHERE zoid NOT IN = %(target_zoid)s
-        AND zoid = inref;
-
-        DELETE FROM object_inrefs
-        WHERE inref = %(source_zoid)s
-        """ % {'source_zoid': source_zoid}
+    stmt = """
+    SELECT zoid
+    FROM object_inrefs
+    WHERE inref = %(source_zoid)s
+    AND zoid <> %(source_zoid)s;
+    """ % {'source_zoid': source_zoid}
     cursor.execute(stmt)
+    stmt = ""
+    for zoid in cursor:
+        zoid = zoid[0]
+        if zoid in target_zoids:
+            continue
+        log.debug('    -> remove zoid=%d, inref=%d from object_inrefs' % (zoid, source_zoid))
+        stmt += """
+        DELETE FROM object_inrefs
+        WHERE zoid = %(zoid)s
+        AND inref = %(source_zoid)s;
+
+        UPDATE object_inrefs
+        SET numinrefs = numinrefs - 1
+        WHERE zoid = %(zoid)s
+        AND inref = %(zoid)s;
+        """ % {'source_zoid': source_zoid,
+               'zoid': zoid}
+    if stmt:
+        log.debug(stmt)
+        cursor.execute(stmt)
 
 
 def handle_transaction(conn, cursor, tid, initialize):
@@ -281,7 +276,7 @@ def remove_orphans(storage):
         if zoid is None:
             break
         log.debug('Remove orphaned with zoid=%s' % zoid)
-        #_remove_blob(storage, zoid)
+        # _remove_blob(storage, zoid)
         # dbop(storage, _remove_zoid, zoid)
         count += 1
         if (time.time() - tick) > 5:

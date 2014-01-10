@@ -11,10 +11,10 @@ This script works also for very large Relstorage ZODBs with several million
 objects. The original pack script took several days and consumed lots of RAM.
 So there was need to accelerate the process of packing.
 
-This script does not consume relevant amounts of RAM, runs much faster than the 
-original. Where the old took 3.5 days only for analysis it takes now about 6 
-hours. On subsequent runs it only processes changes after last run: it 
-considers only transactions newer than last processed transaction of the prior 
+This script does not consume relevant amounts of RAM, runs much faster than the
+original. Where the old took 3.5 days only for analysis it takes now about 6
+hours. On subsequent runs it only processes changes after last run: it
+considers only transactions newer than last processed transaction of the prior
 run.
 
 At time of writing processing 44mio objects takes initially about 3-6h
@@ -70,6 +70,55 @@ After installation a script ``relstorage_pack`` is available::
 
 When running first time with your database pass ``--init`` as parameter. This
 drops and recreates the packing table.
+
+
+How it works
+============
+
+At first run it creates a table ``object_inrefs`` used for inverse reference
+counting. The table has::
+
+``zoid BIGINT NOT NULL,``
+    this is the object id where incoming references are counted  for
+
+``tid BIGINT NOT NULL CHECK (tid > 0)``
+    transaction id of the zoid
+
+``inref BIGINT,``
+    the object id of the incoming reference OR
+    the same as zoid.
+
+``numinrefs BIGINT NOT NULL DEFAULT 0,``
+    if zoid==inref this is the counter field, otherwise it is not relevant.
+
+So this table is used for two different things:
+
+1) keeping track of the incoming references
+
+2) counting the incoming references.
+
+The code runs in three main phases:
+
+initial preparation phase
+    creates missing tables, cleans object_inrefs table and runs through all
+    transactions in order to count and record all transactions.
+
+subsequent runs preparation phase
+    1) starts at last know tid and then runs through all new
+       transactions in order to count and record changes of new transactions.
+    2) for each new transaction zoid (current) check also if there where
+       references gone meanwhile. so get all prior filed references of current
+       and remove any not valid anymore. For each removed decrement the counter
+       on ``object_inrefs`` where zoid=reference and inref=reference.
+
+cleanup phase
+    1) select an orphan, a zoid with no incoming refs
+    2) get all zoids referenced by this orphan
+    3) for each of this reference delete the entry from ``object_inrefs`` where
+       inref=orphan and zoid=reference
+    4) decrement counter on the entry where zoid=reference and inref=reference
+    5) delete the entry with the orphaned zoid from ``object_state`` (real data)
+    6) start with (1) unless theres no orphan any more.
 
 
 Source Code
