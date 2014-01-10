@@ -189,7 +189,6 @@ def _check_removed_refs(cursor, source_zoid, target_zoids):
         """ % {'source_zoid': source_zoid,
                'zoid': zoid}
     if stmt:
-        log.debug(stmt)
         cursor.execute(stmt)
 
 
