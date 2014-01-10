@@ -1,4 +1,4 @@
-"""relstorage_packer - reference counter process"""
+"""relstorage_packer - reference numinrefs process"""
 import datetime
 import logging
 import optparse
@@ -17,21 +17,22 @@ log = logging.getLogger("refcount")
 log.setLevel(logging.INFO)
 
 
-def aquire_counter_lock(conn, cursor):
-    """try to acquire a counter lock, if not possible log error and exit with 1
+def aquire_lock(conn, cursor):
     """
-    log.info("Acquiring counter lock")
+    try to acquire a numinrefs lock, if not possible log error and exit with 1
+    """
+    log.info("Acquiring numinrefs lock")
     cursor.execute("SELECT pg_try_advisory_lock(23)")
     locked = cursor.fetchone()[0]
     if not locked:
-        log.error("Impossible to get Counter Lock. Exit.")
+        log.error("Impossible to get numinrefs Lock. Exit.")
         exit(0)
 
 
-def release_counter_lock(conn, cursor):
-    """release counter lock
+def release_lock(conn, cursor):
+    """release numinrefs lock
     """
-    log.info("Releasing counter lock")
+    log.info("Releasing numinrefs lock")
     cursor.execute("SELECT pg_advisory_unlock(23)")
 
 
@@ -43,15 +44,73 @@ def init_table(conn, cursor):
         zoid       BIGINT NOT NULL,
         tid        BIGINT NOT NULL CHECK (tid > 0),
         inref      BIGINT,
+        numinrefs    BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY(zoid, inref)
     );
     CREATE INDEX object_inrefs_tid  ON object_inrefs (tid);
     CREATE INDEX object_inrefs_refs ON object_inrefs (inref);
-
-    INSERT INTO object_inrefs VALUES(0, 1, 0);
-    INSERT INTO object_inrefs VALUES(0, 1, -1);
+    CREATE INDEX object_inrefs_numinrefs ON object_inrefs (numinrefs);
     """
     cursor.execute(stmt)
+
+    stmt = """
+    CREATE OR REPLACE
+        FUNCTION add_inref(
+            vfrom BIGINT, vto BIGINT, vtid BIGINT
+        )
+    RETURNS void
+    AS $$
+    DECLARE
+        existing_ref boolean;
+    BEGIN
+        SELECT true
+            INTO existing_ref
+                FROM object_inrefs
+                WHERE zoid = vto AND inref = vfrom;
+        IF existing_ref THEN
+            UPDATE object_inrefs
+                SET tid = vtid
+                WHERE zoid = vto AND inref = vto;
+        ELSE
+            INSERT INTO object_inrefs VALUES(vto, vtid, vfrom, 0);
+            UPDATE object_inrefs
+                SET numinrefs = numinrefs + 1
+                WHERE zoid = vto AND inref = vto;
+        END IF;
+        RETURN;
+    END;
+    $$ LANGUAGE plpgsql;
+    """
+    cursor.execute(stmt)
+
+    stmt = """
+    CREATE OR REPLACE
+        FUNCTION remove_zoid(
+            vzoid BIGINT
+        )
+    RETURNS void
+    AS $$
+    DECLARE
+        removed_numinrefs BIGINT;
+    BEGIN
+        UPDATE object_refs
+            SET numinrefs = numinrefs - 1
+            WHERE zoid in (
+                SELECT zoid FROM object_inrefs WHERE inref = vzoid
+            );
+        SELECT count(*)
+            INTO removed_numinrefs
+            WHERE inref = vzoid;
+        DELETE FROM object_inrefs
+            WHERE inref = vzoid;
+        DELETE FROM object_state
+            WHERE zoid = vzoid;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    """
+    cursor.execute(stmt)
+    _add_ref(conn, cursor, 0, -1, 1)
     conn.commit()
 
 
@@ -87,47 +146,15 @@ def next_tid(conn, cursor, lasttid):
     return tid
 
 
-def _add_ref(cursor, tid, source_zoid, target_zoid):
+def _add_ref(conn, cursor, source_zoid, target_zoid, tid):
     """insert an entry to the refcount table or update tid on existing
+
+    - on source_zoid there is reference to target_zoid
+    - so we have source_zoid as incoming reference on target_zoid
     """
     stmt = """
-    INSERT
-        INTO object_inrefs (zoid, tid, inref)
-        SELECT %(target_zoid)d, %(tid)d, %(source_zoid)d
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM object_inrefs
-            WHERE
-                zoid = %(target_zoid)d
-                AND inref = %(source_zoid)d
-        )
-    ;
-    UPDATE object_inrefs
-        SET tid=%(tid)d
-        WHERE
-            zoid=%(target_zoid)d
-            AND inref = %(source_zoid)d
-    ;
+    SELECT add_inref(%(source_zoid)d, %(target_zoid)d, %(tid)d);
     """ % {'source_zoid': source_zoid, 'target_zoid': target_zoid, 'tid': tid}
-    cursor.execute(stmt)
-
-
-def _insert_empty_zoid(cursor, tid, zoid):
-    """Insert zoid if not already there in a pg-cheap way.
-    its a self-reference, so objects without any incoming refs are represented
-    with one entry, the self-reference where zoid=inref.
-    """
-    stmt = """
-    INSERT
-       INTO object_inrefs (zoid, tid, inref)
-       SELECT %(zoid)d, %(tid)d, %(zoid)d
-       WHERE NOT EXISTS (
-           SELECT 1
-           FROM object_inrefs
-           WHERE zoid=%(zoid)d
-           AND inref=%(zoid)d
-        );
-    """ % {'zoid': zoid, 'tid': tid}
     cursor.execute(stmt)
 
 
@@ -137,6 +164,17 @@ def _check_removed_refs(cursor, source_zoid, target_zoids):
     """
     if target_zoids:
         stmt = """
+        UPDATE object_inrefs
+            SET numinrefs = numinrefs - decrement
+        FROM (
+            SELECT count(*) as decrement
+            FROM object_inrefs
+            WHERE inref = %(source_zoid)s
+            AND zoid NOT IN (%(target_zoids)s)
+        )
+        WHERE zoid NOT IN = %(target_zoid)s
+        AND zoid = inref;
+
         DELETE FROM object_inrefs
         WHERE inref = %(source_zoid)s
         AND zoid NOT IN (%(target_zoids)s);
@@ -144,6 +182,16 @@ def _check_removed_refs(cursor, source_zoid, target_zoids):
                'target_zoids': ', '.join([str(_) for _ in target_zoids])}
     else:
         stmt = """
+        UPDATE object_inrefs
+            SET numinrefs = numinrefs - decrement
+        FROM (
+            SELECT count(*) as decrement
+            FROM object_inrefs
+            WHERE inref = %(source_zoid)s
+        )
+        WHERE zoid NOT IN = %(target_zoid)s
+        AND zoid = inref;
+
         DELETE FROM object_inrefs
         WHERE inref = %(source_zoid)s
         """ % {'source_zoid': source_zoid}
@@ -154,8 +202,10 @@ def handle_transaction(conn, cursor, tid, initialize):
     """analyze a given transaction and fill inverse references
     """
     log.debug('handle transaction %d' % tid)
+    conn.commit()  # start clean into this loop
     stmt = """
     BEGIN;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     SELECT zoid, state
     FROM object_state
     WHERE tid = %d
@@ -169,14 +219,13 @@ def handle_transaction(conn, cursor, tid, initialize):
         log.debug('   found %d refs' % len(target_zoids))
         for target_zoid in target_zoids:
             log.debug('   -> process reference to %s' % target_zoid)
-            # import ipdb; ipdb.set_trace()
-            _add_ref(cursor, tid, source_zoid, target_zoid)
+            _add_ref(conn, cursor, target_zoid, target_zoid, tid)
+            _add_ref(conn, cursor, source_zoid, target_zoid, tid)
         if not initialize:
             _check_removed_refs(cursor, source_zoid, target_zoids)
-        _insert_empty_zoid(cursor, tid, source_zoid)
 
-    # commit whole handled tid, so we are sure to have it complete in counters
-    # funny part: this is twice as fast than commit per source_zoid!
+    # commit whole handled tid, so we are sure to have it complete in numinrefs
+    # funny part: this is multiple times faster than commit per source_zoid!
     conn.commit()
 
 
@@ -184,10 +233,10 @@ def _get_orphaned_zoid(conn, cursor):
     stmt = """
     SELECT zoid
     FROM object_inrefs
-    GROUP BY zoid
-    HAVING count(inref) = 1
-    ORDER BY zoid;
+    WHERE numinrefs = 1
+    LIMIT 1;
     """
+    return
     cursor.execute(stmt)
     if not cursor.rowcount:
         return None
@@ -225,13 +274,20 @@ def _remove_zoid(conn, cursor, zoid):
 
 
 def remove_orphans(storage):
+    tick = time.time()
+    count = 0
     while True:
         zoid = dbop(storage, _get_orphaned_zoid)
         if zoid is None:
             break
         log.debug('Remove orphaned with zoid=%s' % zoid)
-        _remove_blob(storage, zoid)
-        dbop(storage, _remove_zoid, zoid)
+        #_remove_blob(storage, zoid)
+        # dbop(storage, _remove_zoid, zoid)
+        count += 1
+        if (time.time() - tick) > 5:
+            log.info('removed %s orphaned objects' % count)
+            tick = time.time()
+    log.info('removed %s orphaned objects' % count)
 
 
 def changed_tids_len(conn, cursor, tid):
@@ -266,13 +322,13 @@ def run(argv=sys.argv):
     log.info("Initiating packing.")
 
     storage = get_storage(args[0])
-    dbop(storage, aquire_counter_lock)
+    dbop(storage, aquire_lock)
 
     if options.initialize:
         try:
             dbop(storage, init_table)
         except:
-            dbop(storage, release_counter_lock)
+            dbop(storage, release_lock)
             storage.close()
             raise
     processed_tids = 0
@@ -342,7 +398,7 @@ def run(argv=sys.argv):
         )
     except Exception, e:
         log.error(e.message)
-        dbop(storage, release_counter_lock)
+        dbop(storage, release_lock)
         storage.close()
         exit(1)
     if processed_tids:
@@ -356,4 +412,4 @@ def run(argv=sys.argv):
         )
     else:
         log.info("Completed, there was nothing to do.")
-    dbop(storage, release_counter_lock)
+    dbop(storage, release_lock)

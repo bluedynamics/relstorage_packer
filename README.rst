@@ -11,10 +11,11 @@ This script works also for very large Relstorage ZODBs with several million
 objects. The original pack script took several days and consumed lots of RAM.
 So there was need to accelerate the process of packing.
 
-This script does not consume relevant amounts of RAM, runs much faster  Where
-the old took 3.5 days only for analysis it takes now about 6 hours). On
-subsequent runs it only processes changes after last run: it considers only
-transactions newer than last processed transaction of the prior run.
+This script does not consume relevant amounts of RAM, runs much faster than the 
+original. Where the old took 3.5 days only for analysis it takes now about 6 
+hours. On subsequent runs it only processes changes after last run: it 
+considers only transactions newer than last processed transaction of the prior 
+run.
 
 At time of writing processing 44mio objects takes initially about 3-6h
 depending on hardware and configuration of Postgresql.
