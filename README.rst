@@ -1,7 +1,8 @@
 relstorage_packer
 =================
 
-Packs a ZODB in a history free PostgreSQL RelStorage with blobs in filesystem.
+Packs a ZODB in a *history-free* PostgreSQL RelStorage with blobs in
+filesystem.
 
 
 Overview
