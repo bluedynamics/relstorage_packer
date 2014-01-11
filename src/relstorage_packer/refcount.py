@@ -83,34 +83,8 @@ def init_table(conn, cursor):
     """
     cursor.execute(stmt)
 
-    stmt = """
-    CREATE OR REPLACE
-        FUNCTION remove_zoid(
-            vzoid BIGINT
-        )
-    RETURNS void
-    AS $$
-    DECLARE
-        removed_numinrefs BIGINT;
-    BEGIN
-        UPDATE object_refs
-            SET numinrefs = numinrefs - 1
-            WHERE zoid in (
-                SELECT zoid FROM object_inrefs WHERE inref = vzoid
-            );
-        SELECT count(*)
-            INTO removed_numinrefs
-            WHERE inref = vzoid;
-        DELETE FROM object_inrefs
-            WHERE inref = vzoid;
-        DELETE FROM object_state
-            WHERE zoid = vzoid;
-    END;
-    $$ LANGUAGE plpgsql;
-
-    """
-    cursor.execute(stmt)
-    _add_ref(conn, cursor, 0, -1, 1)
+    _add_ref(conn, cursor, 0, 0, 1)
+    _add_ref(conn, cursor, -1, 0, 1)
     conn.commit()
 
 
@@ -211,10 +185,12 @@ def handle_transaction(conn, cursor, tid, initialize):
     for source_zoid, target_zoids in result:
         log.debug('-> processing zoid=%d' % (source_zoid))
         log.debug('   found %d refs' % len(target_zoids))
+        _add_ref(conn, cursor, source_zoid, source_zoid, tid)
         for target_zoid in target_zoids:
             log.debug('   -> process reference to %s' % target_zoid)
             _add_ref(conn, cursor, target_zoid, target_zoid, tid)
             _add_ref(conn, cursor, source_zoid, target_zoid, tid)
+
         if not initialize:
             _check_removed_refs(cursor, source_zoid, target_zoids)
 
@@ -230,7 +206,6 @@ def _get_orphaned_zoid(conn, cursor):
     WHERE numinrefs = 1
     LIMIT 1;
     """
-    return
     cursor.execute(stmt)
     if not cursor.rowcount:
         return None
@@ -242,11 +217,11 @@ def _get_orphaned_zoid(conn, cursor):
 def _remove_blob(storage, zoid):
     fshelper = storage.blobhelper.fshelper
     blobpath = fshelper.getPathForOID(p64(zoid))
-    log.debug('Blobs for zoid=%s are at %s' % (zoid, blobpath))
+    log.debug('-> Blobs for zoid=%s are at %s' % (zoid, blobpath))
     if not os.path.exists(blobpath):
-        log.debug('-> Nothing to remove')
+        log.debug('-> No Blobs to remove')
         return
-    log.debug('-> Remove blobs')
+    log.debug('-> Remove Blobs')
     shutil.rmtree(blobpath)
 
 
@@ -256,9 +231,34 @@ def _remove_zoid(conn, cursor, zoid):
     - remove all references in object_inrefs (this includes self reference)
     - remove entry in object_state
     """
+    # handle references (remove, decrement)
     stmt = """
+    SELECT zoid, state
+    FROM object_state
+    WHERE zoid = %d;
+    """ % zoid
+    cursor.execute(stmt)
+
+    source_zoid, state = cursor.fetchone()
+    target_zoids = get_references(state)
+    stmt = ""
+    for target_zoid in target_zoids:
+        stmt += """
+        DELETE FROM object_inrefs
+        WHERE zoid = %(target_zoid)s
+        AND inref = %(source_zoid)s;
+
+        UPDATE object_inrefs
+        SET numinrefs = numinrefs - 1
+        WHERE zoid = %(target_zoid)s
+        AND inref = %(target_zoid)s;
+        """ % {'source_zoid': source_zoid,
+               'target_zoid': target_zoid}
+
+    # finally delete data
+    stmt += """
     DELETE FROM object_inrefs
-    WHERE inref = %(zoid)s;
+    WHERE zoid =  %(zoid)s;
 
     DELETE FROM object_state
     WHERE zoid =  %(zoid)s;
@@ -274,14 +274,14 @@ def remove_orphans(storage):
         zoid = dbop(storage, _get_orphaned_zoid)
         if zoid is None:
             break
-        log.debug('Remove orphaned with zoid=%s' % zoid)
-        # _remove_blob(storage, zoid)
-        # dbop(storage, _remove_zoid, zoid)
+        log.debug('-> Remove orphaned with zoid=%s' % zoid)
+        dbop(storage, _remove_zoid, zoid)
+        _remove_blob(storage, zoid)
         count += 1
         if (time.time() - tick) > 5:
-            log.info('removed %s orphaned objects' % count)
+            log.info('Removed %s orphaned objects' % count)
             tick = time.time()
-    log.info('removed %s orphaned objects' % count)
+    log.info('finished removal of %s orphaned objects' % count)
 
 
 def changed_tids_len(conn, cursor, tid):
