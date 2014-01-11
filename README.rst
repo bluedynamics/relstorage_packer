@@ -76,7 +76,7 @@ How it works
 ============
 
 At first run it creates a table ``object_inrefs`` used for inverse reference
-counting. The table has::
+counting. The table has:
 
 ``zoid BIGINT NOT NULL,``
     this is the object id where incoming references are counted  for
