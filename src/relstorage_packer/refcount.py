@@ -26,7 +26,7 @@ def aquire_lock(conn, cursor):
     locked = cursor.fetchone()[0]
     if not locked:
         log.error("Impossible to get numinrefs Lock. Exit.")
-        exit(0)
+        exit(1)
 
 
 def release_lock(conn, cursor):

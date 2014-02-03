@@ -6,7 +6,10 @@ History
 ----------------
 
 - unlock in a finally to really unlock an failure
-  [jensens, 2014-02-03] 
+  [jensens, 2014-02-03]
+
+- use non-zero exit code if lock could not be aquired.
+  [saily]
 
 
 2.0
