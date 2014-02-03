@@ -2,8 +2,8 @@
 History
 =======
 
-2.1 (unreleased)
-----------------
+2.0.1 (2014-02-03)
+------------------
 
 - unlock in a finally to really unlock an failure
   [jensens, 2014-02-03]
