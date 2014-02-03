@@ -392,9 +392,11 @@ def run(argv=sys.argv):
         )
     except Exception, e:
         log.error(e.message)
+        exit(1)
+    finally:
         dbop(storage, release_lock)
         storage.close()
-        exit(1)
+
     if processed_tids:
         processing_time = time.time() - start
         log.info(
@@ -406,4 +408,3 @@ def run(argv=sys.argv):
         )
     else:
         log.info("Completed, there was nothing to do.")
-    dbop(storage, release_lock)
