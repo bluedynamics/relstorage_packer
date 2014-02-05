@@ -2,7 +2,7 @@
 History
 =======
 
-2.0.2 (unreleased)
+2.0.2 (2014-02-05)
 ------------------
 
 - also support storages w/o blobstorage
