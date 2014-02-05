@@ -5,7 +5,8 @@ History
 2.0.2 (unreleased)
 ------------------
 
-- Nothing changed yet.
+- also support storages w/o blobstorage
+  [jensens, 2014-02-05]
 
 
 2.0.1 (2014-02-03)
