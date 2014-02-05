@@ -215,6 +215,9 @@ def _get_orphaned_zoid(conn, cursor):
 
 
 def _remove_blob(storage, zoid):
+    if storage.blobhelper is None:
+        log.debug('-> No blobstorage available')
+        return
     fshelper = storage.blobhelper.fshelper
     blobpath = fshelper.getPathForOID(p64(zoid))
     log.debug('-> Blobs for zoid=%s are at %s' % (zoid, blobpath))
