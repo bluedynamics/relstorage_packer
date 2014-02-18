@@ -6,9 +6,10 @@ import os
 import shutil
 import sys
 import time
-from .utils import dbop
-from .utils import get_references
 from .utils import get_storage
+from .utils import get_references
+from .utils import get_conn_and_cursor
+from .utils import dbcommit
 from ZODB.utils import p64
 
 WAIT_DELAY = 1
@@ -16,8 +17,11 @@ WAIT_DELAY = 1
 log = logging.getLogger("refcount")
 log.setLevel(logging.INFO)
 
+################################################################################
+# Locking
 
-def aquire_lock(conn, cursor):
+@dbcommit
+def aquire_lock(cursor):
     """
     try to acquire a numinrefs lock, if not possible log error and exit with 1
     """
@@ -28,15 +32,19 @@ def aquire_lock(conn, cursor):
         log.error("Impossible to get numinrefs Lock. Exit.")
         exit(1)
 
-
-def release_lock(conn, cursor):
+@dbcommit
+def release_lock(cursor):
     """release numinrefs lock
     """
     log.info("Releasing numinrefs lock")
     cursor.execute("SELECT pg_advisory_unlock(23)")
 
 
-def init_table(conn, cursor):
+################################################################################
+# Initialization
+
+@dbcommit
+def init_table(cursor):
     log.info("Create table object_inrefs (drop existing).")
     stmt = """
     DROP TABLE IF EXISTS object_inrefs;
@@ -82,13 +90,14 @@ def init_table(conn, cursor):
     $$ LANGUAGE plpgsql;
     """
     cursor.execute(stmt)
-
-    _add_ref(conn, cursor, 0, 0, 1)
-    _add_ref(conn, cursor, -1, 0, 1)
-    conn.commit()
+    _add_ref(cursor, 0, 0, 1)
+    _add_ref(cursor, -1, 0, 1)
 
 
-def tid_boundary(conn, cursor):
+################################################################################
+# Fetching of Transaction Ids to be processed
+
+def tid_boundary(cursor):
     """get the latest handled tid from object_inrefs or 0 if table is empty
     """
     stmt = """
@@ -102,7 +111,7 @@ def tid_boundary(conn, cursor):
     return tid
 
 
-def next_tid(conn, cursor, lasttid):
+def next_tid(cursor, lasttid):
     """get next higher tid after given lasttid
     """
     stmt = """
@@ -119,8 +128,17 @@ def next_tid(conn, cursor, lasttid):
     log.debug("next transaction id to process is: tid=%d" % tid)
     return tid
 
+def changed_tids_len(cursor, tid):
+    stmt = "SELECT COUNT(distinct tid) FROM object_state WHERE tid >=%d;" % tid
+    cursor.execute(stmt)
+    (count,) = cursor.next()
+    return count or 0
 
-def _add_ref(conn, cursor, source_zoid, target_zoid, tid):
+
+################################################################################
+# Creation/ update of inverse references table and counters
+
+def _add_ref(cursor, source_zoid, target_zoid, tid):
     """insert an entry to the refcount table or update tid on existing
 
     - on source_zoid there is reference to target_zoid
@@ -165,15 +183,14 @@ def _check_removed_refs(cursor, source_zoid, target_zoids):
     if stmt:
         cursor.execute(stmt)
 
-
-def handle_transaction(conn, cursor, tid, initialize):
+@dbcommit
+def handle_transaction(cursor, tid, initialize):
     """analyze a given transaction and fill inverse references
     """
     log.debug('handle transaction %d' % tid)
-    conn.commit()  # start clean into this loop
+#    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     stmt = """
     BEGIN;
-    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     SELECT zoid, state
     FROM object_state
     WHERE tid = %d
@@ -185,21 +202,23 @@ def handle_transaction(conn, cursor, tid, initialize):
     for source_zoid, target_zoids in result:
         log.debug('-> processing zoid=%d' % (source_zoid))
         log.debug('   found %d refs' % len(target_zoids))
-        _add_ref(conn, cursor, source_zoid, source_zoid, tid)
+        _add_ref(cursor, source_zoid, source_zoid, tid)
         for target_zoid in target_zoids:
             log.debug('   -> process reference to %s' % target_zoid)
-            _add_ref(conn, cursor, target_zoid, target_zoid, tid)
-            _add_ref(conn, cursor, source_zoid, target_zoid, tid)
+            _add_ref(cursor, target_zoid, target_zoid, tid)
+            _add_ref(cursor, source_zoid, target_zoid, tid)
 
         if not initialize:
             _check_removed_refs(cursor, source_zoid, target_zoids)
 
     # commit whole handled tid, so we are sure to have it complete in numinrefs
     # funny part: this is multiple times faster than commit per source_zoid!
-    conn.commit()
 
 
-def _get_orphaned_zoid(conn, cursor):
+################################################################################
+# Removal of orphaned objects
+
+def _get_orphaned_zoid(cursor):
     stmt = """
     SELECT zoid
     FROM object_inrefs
@@ -226,9 +245,12 @@ def _remove_blob(storage, zoid):
         return
     log.debug('-> Remove Blobs')
     shutil.rmtree(blobpath)
+    # here traversal up and removal of empty directories makes sense.
+    # otherwise there are many empty directories left.
+    # need to check side effects first!
 
 
-def _remove_zoid(conn, cursor, zoid):
+def _remove_zoid(cursor, zoid):
     """
     remove a zoid completly.
     - remove all references in object_inrefs (this includes self reference)
@@ -267,19 +289,29 @@ def _remove_zoid(conn, cursor, zoid):
     WHERE zoid =  %(zoid)s;
     """ % {'zoid': zoid}
     cursor.execute(stmt)
-    conn.commit()
 
 
-def remove_orphans(storage):
+def remove_orphans(connection, cursor, storage):
+    """remove orphans with blobs
+
+    do transactions in here manually, because of blobs
+    """
     tick = time.time()
     count = 0
     while True:
-        zoid = dbop(storage, _get_orphaned_zoid)
+        zoid = _get_orphaned_zoid(cursor)
         if zoid is None:
             break
         log.debug('-> Remove orphaned with zoid=%s' % zoid)
-        dbop(storage, _remove_zoid, zoid)
+        try:
+            _remove_zoid(cursor, zoid)
+            cursor.close()
+            connection.commit()
+        except:
+            connection.rollback()
+            raise
         _remove_blob(storage, zoid)
+        cursor = connection.cursor()
         count += 1
         if (time.time() - tick) > 5:
             log.info('Removed %s orphaned objects' % count)
@@ -287,12 +319,8 @@ def remove_orphans(storage):
     log.info('finished removal of %s orphaned objects' % count)
 
 
-def changed_tids_len(conn, cursor, tid):
-    stmt = "SELECT COUNT(distinct tid) FROM object_state WHERE tid >=%d;" % tid
-    cursor.execute(stmt)
-    (count,) = cursor.next()
-    return count or 0
-
+################################################################################
+# Main Runner
 
 def run(argv=sys.argv):
     parser = optparse.OptionParser(
@@ -319,34 +347,39 @@ def run(argv=sys.argv):
     log.info("Initiating packing.")
 
     storage = get_storage(args[0])
-    dbop(storage, aquire_lock)
+    connection, cursor = get_conn_and_cursor(storage)
+    aquire_lock(connection, cursor)
+    cursor = connection.cursor()
 
     if options.initialize:
         try:
-            dbop(storage, init_table)
+            init_table(connection, cursor)
+            cursor = connection.cursor()
         except:
-            dbop(storage, release_lock)
+            release_lock(connection, cursor)
             storage.close()
             raise
     processed_tids = 0
     start = logtime = time.time()
     try:
-        init_tid = tid = dbop(storage, tid_boundary)
+        init_tid = tid = tid_boundary(cursor)
         log.info('Fetching number of all transactions from database...')
-        overall_tids = dbop(storage, changed_tids_len, init_tid)
+        overall_tids = changed_tids_len(cursor, init_tid)
         log.info('Found %d transactions in database.' % overall_tids)
         processed_tids_offset = 0
         initialize = options.initialize
+
+        # BUILD/ UPDATE INVERSE REFERENCES
         while True:
-            tid = dbop(storage, next_tid, tid)
+            tid = next_tid(cursor, tid)
             if not tid:
                 break
-            dbop(
-                storage,
-                handle_transaction,
-                tid,
-                initialize=initialize
-            )
+
+            # BUILD/UPDATE FOR TID
+            handle_transaction(connection, cursor, tid, initialize=initialize)
+            cursor = connection.cursor()
+
+            # Statistics
             processed_tids += 1
             if time.time() - logtime > 1:
                 # calc/print some stats
@@ -387,7 +420,10 @@ def run(argv=sys.argv):
             (str(datetime.timedelta(seconds=processing_time)), processing_time)
         )
         cleanup_start = time.time()
-        remove_orphans(storage)
+
+        # REMOVE
+        remove_orphans(connection, cursor, storage)
+
         processing_time = time.time() - cleanup_start
         log.info(
             'Finished cleanup phase after %s (%.2fs)' %
@@ -395,9 +431,11 @@ def run(argv=sys.argv):
         )
     except Exception, e:
         log.error(e.message)
+        raise
         exit(1)
     finally:
-        dbop(storage, release_lock)
+        cursor = connection.cursor()
+        release_lock(connection, cursor)
         storage.close()
 
     if processed_tids:

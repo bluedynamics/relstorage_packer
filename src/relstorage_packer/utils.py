@@ -14,16 +14,22 @@ schema_xml = """
 </schema>
 """
 
+def dbcommit(func):
+    """decorator with save commit
 
-def dbop(storage, func, *args, **kwargs):
-    """wrapper to private method in order to call a given function with
-    connection, cursor and optionally given args and kwargs.
+    closes cursor!
     """
 
-    def func_conn(conn, cursor, *args, **kwargs):
-        return func(conn, cursor, *args, **kwargs)
+    def _wrapper(connection, cursor, *args, **kw):
+        try:
+            func(cursor, *args, **kw)
+            cursor.close()
+            connection.commit()
+        except:
+            connection.rollback()
+            raise
 
-    return storage._with_store(func_conn, *args, **kwargs)
+    return _wrapper
 
 
 def get_storage(config_file):
@@ -43,6 +49,12 @@ def get_storage(config_file):
         raise RuntimeError('Only PostgreSQL databases are supported')
     return storage
 
+def get_conn_and_cursor(storage):
+    adapter = storage._adapter
+    return adapter.connmanager.open()
+
+def get_cursor(connection):
+    return connection.cursor()
 
 def get_references(state):
     """Return the set of OIDs the given state refers to."""
