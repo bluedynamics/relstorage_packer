@@ -5,13 +5,17 @@ History
 2.0.3 (unreleased)
 ------------------
 
-- we had a whole bunch of ``idle in transaction (aborted)`` postgres 
-  processes running after packing. This resulted in in an ``OperationalError: 
-  out of shared memory HINT: You might need to increase 
-  max_pred_locks_per_transaction.`` Error. As a result I refactored the 
-  transaction handling and rollback and use explicit commit instead of using 
+- after long running connections postgresql takes lots of RAM. So we reconnect
+  every 20000 cycles (TID analyzing or ZOID removal).
+  [jensens, 2014-02-18]
+
+- we had a whole bunch of ``idle in transaction (aborted)`` postgres
+  processes running after packing. This resulted in in an ``OperationalError:
+  out of shared memory HINT: You might need to increase
+  max_pred_locks_per_transaction.`` Error. As a result I refactored the
+  transaction handling and rollback and use explicit commit instead of using
   the relstorage ``storage._with_store``. Now this part is very controlled
-  and not the source of hanging connections w/o rollback. 
+  and not the source of hanging connections w/o rollback.
   [jensens, 2014-02-18]
 
 

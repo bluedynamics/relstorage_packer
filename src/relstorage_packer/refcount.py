@@ -13,6 +13,7 @@ from .utils import dbcommit
 from ZODB.utils import p64
 
 WAIT_DELAY = 1
+CYCLES_TO_RECONNECT = 20000
 
 log = logging.getLogger("refcount")
 log.setLevel(logging.INFO)
@@ -311,8 +312,20 @@ def remove_orphans(connection, cursor, storage):
             connection.rollback()
             raise
         _remove_blob(storage, zoid)
-        cursor = connection.cursor()
         count += 1
+
+        if (count % CYCLES_TO_RECONNECT) == 0:
+            # get a fresh connection, else postgres server may consume too
+            # much RAM .oO( sigh )
+            log.info('Refresh connection after {0} zoid cycles'.format(count))
+            connection.close()
+            connection, cursor = get_conn_and_cursor(storage)
+        else:
+            # only refresh closed cursor
+            cursor = connection.cursor()
+
+
+        cursor = connection.cursor()
         if (time.time() - tick) > 5:
             log.info('Removed %s orphaned objects' % count)
             tick = time.time()
@@ -377,10 +390,22 @@ def run(argv=sys.argv):
 
             # BUILD/UPDATE FOR TID
             handle_transaction(connection, cursor, tid, initialize=initialize)
-            cursor = connection.cursor()
+            processed_tids += 1
+            if (processed_tids % CYCLES_TO_RECONNECT) == 0:
+                # get a fresh connection, else postgres server may consume too
+                # much RAM .oO( sigh )
+                connection.close()
+                log.info(
+                    'Refresh connection after {0} tid cycles'.format(
+                        processed_tids
+                    )
+                )
+                connection, cursor = get_conn_and_cursor(storage)
+            else:
+                # only refresh closed cursor
+                cursor = connection.cursor()
 
             # Statistics
-            processed_tids += 1
             if time.time() - logtime > 1:
                 # calc/print some stats
                 period = time.time() - logtime
@@ -436,6 +461,7 @@ def run(argv=sys.argv):
     finally:
         cursor = connection.cursor()
         release_lock(connection, cursor)
+        connection.close()
         storage.close()
 
     if processed_tids:
