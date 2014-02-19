@@ -345,7 +345,7 @@ LOGLINE_TPL = """\
 {tid_ratio:3.3f}% | {duration} elapsed | {eta} eta (in {etadelta}) | \
 {processed_tids:d} done ({tid_todo:d} of {overall_tids:d}) | \
 {tid_rate:3.1f} t/s | {tid_delta_period:3d} t/delta ({tid_rate_period:2.1f} t/s) | \
-{processed_zoids:d} zoids | {processed_refs} refs
+{processed_zoids:d} zoids | {processed_refs} refs\
 """
 
 def process_statistics(stats, force=False):
