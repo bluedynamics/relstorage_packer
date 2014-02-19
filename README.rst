@@ -134,7 +134,8 @@ better.
 Using integrated buildout and testing
 -------------------------------------
 
-Tests are not prefected, but it has a bunch of tests. To run them provide a
+Testing this code i not easy and writing good tests is a task to be done.
+At the moment you can try the code bu running a
 postgres database on localhost (unless you want to change ``buildout.cfg``).
 Then run as database-user (named ``postgres`` on debian) the commands::
 
@@ -143,7 +144,7 @@ Then run as database-user (named ``postgres`` on debian) the commands::
     psql -c "REVOKE connect ON DATABASE relstorage_packer_test FROM PUBLIC;"
     psql -c "GRANT connect ON DATABASE relstorage_packer_test TO zope;"
  
-Next (because of my laziness) run ``./bin/instance start`` which runs a Plone.
+Next (because of my laziness) run ``./bin/instance start`` which starts a Plone.
 Add a Plone Site, add and delete some content to fill the database with
 something to pack.
 
