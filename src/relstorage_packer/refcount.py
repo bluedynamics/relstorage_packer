@@ -25,20 +25,21 @@ log.setLevel(logging.INFO)
 @dbcommit
 def aquire_lock(cursor):
     """
-    try to acquire a numinrefs lock, if not possible log error and exit with 1
+    try to acquire a relstorage_packer lock, if not possible log error and exit
+    with 1
     """
-    log.info("Acquiring numinrefs lock")
+    log.info("Acquiring relstorage_packer lock")
     cursor.execute("SELECT pg_try_advisory_lock(23)")
     locked = cursor.fetchone()[0]
     if not locked:
-        log.error("Impossible to get numinrefs Lock. Exit.")
+        log.error("Impossible to get relstorage_packer Lock. Exit.")
         exit(1)
 
 @dbcommit
 def release_lock(cursor):
-    """release numinrefs lock
+    """release relstorage_packer lock
     """
-    log.info("Releasing numinrefs lock")
+    log.info("Releasing relstorage_packer lock")
     cursor.execute("SELECT pg_advisory_unlock(23)")
 
 
