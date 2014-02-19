@@ -5,8 +5,12 @@ History
 2.0.3 (unreleased)
 ------------------
 
+- refactored logging, because it was always in my way when changing other parts 
+  of the code.
+  [jensens, 2014-02-19]
+
 - after long running connections postgresql takes lots of RAM. So we reconnect
-  every 20000 cycles (TID analyzing or ZOID removal).
+  every 5000 cycles (TID analyzing or ZOID removal).
   [jensens, 2014-02-18]
 
 - we had a whole bunch of ``idle in transaction (aborted)`` postgres
