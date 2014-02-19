@@ -342,7 +342,7 @@ def remove_orphans(connection, cursor, storage):
 # Statistics
 
 LOGLINE_TPL = """\
-{tid_ratio:3.3f}% in {duration}s | eta {eta} in {etadelta} | \
+{tid_ratio:3.3f}% in {duration} | eta {eta} in {etadelta} | \
 {processed_tids:d} of {overall_tids:d} ({tid_todo:d} todo) | \
 {tid_rate:3.1f} t/s | {tid_delta_period:3d} t/delta ({tid_rate_period:3.1f} t/s) | \
 {processed_zoids:d} zoids | {processed_refs} refs\
