@@ -16,7 +16,7 @@ import time
 WAIT_DELAY = 1
 CYCLES_TO_RECONNECT = 1000
 
-log = logging.getLogger("refcount")
+log = logging.getLogger("pack")
 log.setLevel(logging.INFO)
 
 ################################################################################
