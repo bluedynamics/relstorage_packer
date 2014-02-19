@@ -461,7 +461,7 @@ def run(argv=sys.argv):
                 log.info(
                     'Refresh connection after {processed_tids} tid '
                     'cycles'.format(
-                        stats
+                        **stats
                     )
                 )
                 connection, cursor = get_conn_and_cursor(storage)
