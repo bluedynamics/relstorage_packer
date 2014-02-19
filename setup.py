@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-version = '2.0.3.dev0'
+version = '2.1'
 shortdesc = \
 'Packs a History Free PostgreSQL RelStorage for ZODB.'
 longdesc = open(os.path.join(os.path.dirname(__file__), 'README.rst')).read()

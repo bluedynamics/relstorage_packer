@@ -2,8 +2,8 @@
 History
 =======
 
-2.0.3 (unreleased)
-------------------
+2.1 (2014-02-19)
+----------------
 
 - refactored logging, because it was always in my way when changing other parts 
   of the code.
