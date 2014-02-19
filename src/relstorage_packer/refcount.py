@@ -15,6 +15,7 @@ import time
 
 WAIT_DELAY = 1
 CYCLES_TO_RECONNECT = 5000
+LOG_INTERVAL_SECS = 1
 
 log = logging.getLogger("pack")
 log.setLevel(logging.INFO)
@@ -171,7 +172,10 @@ def _check_removed_refs(cursor, source_zoid, target_zoids):
         zoid = zoid[0]
         if zoid in target_zoids:
             continue
-        log.debug('    -> remove zoid=%d, inref=%d from object_inrefs' % (zoid, source_zoid))
+        log.debug(
+            '    -> remove zoid=%d, inref=%d from object_inrefs' %
+            (zoid, source_zoid)
+        )
         stmt += """
         DELETE FROM object_inrefs
         WHERE zoid = %(zoid)s
@@ -344,36 +348,45 @@ def remove_orphans(connection, cursor, storage):
 LOGLINE_TPL = """\
 {tid_ratio:3.3f}% in {duration} | eta {eta} in {etadelta} | \
 {processed_tids:d} of {overall_tids:d} ({tid_todo:d} todo) | \
-{tid_rate:5.1f} t/s | {tid_delta_period:3d} t/delta ({tid_rate_period:5.1f} t/s) | \
+{tid_rate:5.1f} t/s | \
+{tid_delta_period:3d} t/delta ({tid_rate_period:5.1f} t/s) | \
 {processed_zoids:d} zoids | {processed_refs} refs\
 """
 
 def process_statistics(stats, force=False):
-    if force or time.time() - stats['logtime'] > 1:
-        now = time.time()
-        period = now - stats['logtime']
+    if not force \
+       and time.time() - stats['logtime'] < LOG_INTERVAL_SECS:
+        return
+    now = time.time()
+    period = now - stats['logtime']
 
-        duration = datetime.timedelta(seconds=now - stats['start'])
-        stats['duration'] = str(duration).rsplit('.', 1)[0]
+    duration = datetime.timedelta(seconds=now - stats['start'])
+    stats['duration'] = str(duration).rsplit('.', 1)[0]
 
-        stats['tid_delta_period'] = stats['processed_tids'] - stats['processed_tids_offset']
+    stats['tid_delta_period'] = \
+        stats['processed_tids'] - stats['processed_tids_offset']
 
-        stats['tid_rate_period'] = stats['tid_delta_period'] / period
+    stats['tid_rate_period'] = stats['tid_delta_period'] / period
 
-        stats['tid_ratio'] = stats['processed_tids'] / float(stats['overall_tids']) * 100
-        stats['tid_todo'] = stats['overall_tids'] - stats['processed_tids']
-        stats['tid_rate'] = stats['processed_tids'] / (now - stats['start'])
+    stats['tid_ratio'] = \
+        stats['processed_tids'] / float(stats['overall_tids']) * 100
 
-        stats['left'] = ((now - stats['start']) / stats['processed_tids']) * stats['tid_todo']
-        stats['left'] = datetime.timedelta(seconds=stats['left'])
+    stats['tid_todo'] = stats['overall_tids'] - stats['processed_tids']
+    stats['tid_rate'] = stats['processed_tids'] / (now - stats['start'])
 
-        stats['eta'] = (datetime.datetime.now() + stats['left']).strftime('%Y-%m-%d %H:%M')
-        stats['etadelta'] = str(stats['left']).rsplit('.', 1)[0]
+    stats['left'] = \
+        ((now - stats['start']) / stats['processed_tids']) * stats['tid_todo']
 
-        log.info(LOGLINE_TPL.format(**stats))
+    stats['left'] = datetime.timedelta(seconds=stats['left'])
 
-        stats['logtime'] = now
-        stats['processed_tids_offset'] = stats['processed_tids']
+    stats['eta'] = \
+        (datetime.datetime.now() + stats['left']).strftime('%Y-%m-%d %H:%M')
+    stats['etadelta'] = str(stats['left']).rsplit('.', 1)[0]
+
+    log.info(LOGLINE_TPL.format(**stats))
+
+    stats['logtime'] = now
+    stats['processed_tids_offset'] = stats['processed_tids']
 
 
 ################################################################################
