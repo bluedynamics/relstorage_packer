@@ -1,4 +1,10 @@
 """relstorage_packer - reference numinrefs process"""
+from .utils import dbcommit
+from .utils import get_conn_and_cursor
+from .utils import get_references
+from .utils import get_storage
+from ZODB.utils import p64
+from psycopg2 import InterfaceError
 import datetime
 import logging
 import optparse
@@ -6,11 +12,6 @@ import os
 import shutil
 import sys
 import time
-from .utils import get_storage
-from .utils import get_references
-from .utils import get_conn_and_cursor
-from .utils import dbcommit
-from ZODB.utils import p64
 
 WAIT_DELAY = 1
 CYCLES_TO_RECONNECT = 1000
@@ -492,7 +493,11 @@ def run(argv=sys.argv):
         raise
         exit(1)
     finally:
-        cursor = connection.cursor()
+        # check if connection is closed!
+        try:
+            cursor = connection.cursor()
+        except InterfaceError:
+            connection, cursor = get_conn_and_cursor(storage)
         release_lock(connection, cursor)
         connection.close()
         storage.close()
