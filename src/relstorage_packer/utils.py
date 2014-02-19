@@ -22,13 +22,13 @@ def dbcommit(func):
 
     def _wrapper(connection, cursor, *args, **kw):
         try:
-            func(cursor, *args, **kw)
+            result = func(cursor, *args, **kw)
             cursor.close()
             connection.commit()
         except:
             connection.rollback()
             raise
-
+        return result
     return _wrapper
 
 

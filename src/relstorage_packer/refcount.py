@@ -13,7 +13,7 @@ from .utils import dbcommit
 from ZODB.utils import p64
 
 WAIT_DELAY = 1
-CYCLES_TO_RECONNECT = 20000
+CYCLES_TO_RECONNECT = 1000
 
 log = logging.getLogger("refcount")
 log.setLevel(logging.INFO)
@@ -198,13 +198,17 @@ def handle_transaction(cursor, tid, initialize):
     ORDER BY zoid;
     """ % tid
     cursor.execute(stmt)
+    zoid_count = 0
+    refs_count = 0
     # cursor is needed, so store in array
     result = [(zoid, get_references(state)) for zoid, state in cursor]
     for source_zoid, target_zoids in result:
         log.debug('-> processing zoid=%d' % (source_zoid))
         log.debug('   found %d refs' % len(target_zoids))
+        zoid_count += 1
         _add_ref(cursor, source_zoid, source_zoid, tid)
         for target_zoid in target_zoids:
+            refs_count += 1
             log.debug('   -> process reference to %s' % target_zoid)
             _add_ref(cursor, target_zoid, target_zoid, tid)
             _add_ref(cursor, source_zoid, target_zoid, tid)
@@ -214,7 +218,7 @@ def handle_transaction(cursor, tid, initialize):
 
     # commit whole handled tid, so we are sure to have it complete in numinrefs
     # funny part: this is multiple times faster than commit per source_zoid!
-
+    return {'numzoids': zoid_count, 'numrefs': refs_count}
 
 ################################################################################
 # Removal of orphaned objects
@@ -330,6 +334,44 @@ def remove_orphans(connection, cursor, storage):
             log.info('Removed %s orphaned objects' % count)
             tick = time.time()
     log.info('finished removal of %s orphaned objects' % count)
+    return count
+
+################################################################################
+# Statistics
+
+LOGLINE_TPL = """\
+{tid_ratio: 3.3f}% | {duration} elapsed | {eta} eta (in {etadelta}) | \
+{processed_tids:d} done | {tid_todo:d} of {overall_tids:d} left | \
+{tid_rate: 3.1f} t/s | {tid_delta_period: 3d} t/delta ({tid_rate_period: 2.1f} t/s) | \
+{processed_zoids:d} zoids | {processed_refs} refs
+"""
+
+def process_statistics(stats, force=False):
+    if force or time.time() - stats['logtime'] > 1:
+        now = time.time()
+        period = now - stats['logtime']
+
+        duration = datetime.timedelta(seconds=now - stats['start'])
+        stats['duration'] = str(duration).rsplit('.', 1)[0]
+
+        stats['tid_delta_period'] = stats['processed_tids'] - stats['processed_tids_offset']
+
+        stats['tid_rate_period'] = stats['tid_delta_period'] / period
+
+        stats['tid_ratio'] = stats['processed_tids'] / float(stats['overall_tids']) * 100
+        stats['tid_todo'] = stats['overall_tids'] - stats['processed_tids']
+        stats['tid_rate'] = stats['processed_tids'] / (now - stats['start'])
+
+        stats['left'] = ((now - stats['start']) / stats['processed_tids']) * stats['tid_todo']
+        stats['left'] = datetime.timedelta(seconds=stats['left'])
+
+        stats['eta'] = (datetime.datetime.now() + stats['left']).strftime('%Y-%m-%d %H:%M')
+        stats['etadelta'] = str(stats['left']).rsplit('.', 1)[0]
+
+        log.info(LOGLINE_TPL.format(**stats))
+
+        stats['logtime'] = now
+        stats['processed_tids_offset'] = stats['processed_tids']
 
 
 ################################################################################
@@ -372,15 +414,28 @@ def run(argv=sys.argv):
             release_lock(connection, cursor)
             storage.close()
             raise
-    processed_tids = 0
-    start = logtime = time.time()
+    stats = {
+        'processed_tids': 0,
+        'processed_zoids': 0,
+        'processed_refs': 0,
+    }
+    stats['start'] = stats['logtime'] = time.time()
     try:
-        init_tid = tid = tid_boundary(cursor)
-        log.info('Fetching number of all transactions from database...')
-        overall_tids = changed_tids_len(cursor, init_tid)
-        log.info('Found %d transactions in database.' % overall_tids)
-        processed_tids_offset = 0
         initialize = options.initialize
+        init_tid = tid = tid_boundary(cursor)
+        stats['processed_tids_offset'] = 0
+        if initialize:
+            log.info('Fetching number of all transactions from DB ...')
+        else:
+            log.info(
+                "Fetching number of new transactions since tid {0} "
+                "from DB ...".format(init_tid)
+            )
+        stats['overall_tids'] = changed_tids_len(cursor, init_tid)
+        if initialize:
+            log.info('-> {overall_tids} transactions in DB'.format(**stats))
+        else:
+            log.info('-> {overall_tids} new transactions in DB'.format(**stats))
 
         # BUILD/ UPDATE INVERSE REFERENCES
         while True:
@@ -389,15 +444,23 @@ def run(argv=sys.argv):
                 break
 
             # BUILD/UPDATE FOR TID
-            handle_transaction(connection, cursor, tid, initialize=initialize)
-            processed_tids += 1
-            if (processed_tids % CYCLES_TO_RECONNECT) == 0:
+            handle_stats = handle_transaction(
+                connection,
+                cursor,
+                tid,
+                initialize=initialize
+            )
+            stats['processed_tids'] += 1
+            stats['processed_zoids'] += handle_stats['numzoids']
+            stats['processed_refs'] += handle_stats['numrefs']
+            if (stats['processed_tids'] % CYCLES_TO_RECONNECT) == 0:
                 # get a fresh connection, else postgres server may consume too
                 # much RAM .oO( sigh )
                 connection.close()
                 log.info(
-                    'Refresh connection after {0} tid cycles'.format(
-                        processed_tids
+                    'Refresh connection after {processed_tids} tid '
+                    'cycles'.format(
+                        stats
                     )
                 )
                 connection, cursor = get_conn_and_cursor(storage)
@@ -406,40 +469,10 @@ def run(argv=sys.argv):
                 cursor = connection.cursor()
 
             # Statistics
-            if time.time() - logtime > 1:
-                # calc/print some stats
-                period = time.time() - logtime
-                duration = datetime.timedelta(seconds=time.time() - start)
-                tid_delta_period = processed_tids - processed_tids_offset
-                tid_rate_period = tid_delta_period / period
-                tid_ratio = processed_tids / float(overall_tids) * 100
-                tid_todo = overall_tids - processed_tids
-                tid_rate = processed_tids / (time.time() - start)
-                time_left = ((time.time() - start) / processed_tids) * tid_todo
-                time_left = datetime.timedelta(seconds=time_left)
-                eta = datetime.datetime.now() + time_left
-                log.info(
-                    'Processed %.3f%% | '
-                    '%s elapsed | '
-                    '%s eta (in %s) | '
-                    '%d done | '
-                    '%d of %d left | '
-                    '%.1f t/s | '
-                    '%.1f t/delta' % (
-                        tid_ratio,
-                        str(duration).rsplit('.', 1)[0],
-                        eta.strftime('%Y-%m-%d %H:%M'),
-                        str(time_left).rsplit('.', 1)[0],
-                        processed_tids,
-                        tid_todo,
-                        overall_tids,
-                        tid_rate,
-                        tid_rate_period,
-                    )
-                )
-                logtime = time.time()
-                processed_tids_offset = processed_tids
-        processing_time = time.time() - start
+            process_statistics(stats)
+        if stats['processed_tids']:
+            process_statistics(stats, True)
+        processing_time = time.time() - stats['start']
         log.info(
             'Finished analyzation phase after %s (%.2fs)' %
             (str(datetime.timedelta(seconds=processing_time)), processing_time)
@@ -447,7 +480,7 @@ def run(argv=sys.argv):
         cleanup_start = time.time()
 
         # REMOVE
-        remove_orphans(connection, cursor, storage)
+        removed_count = remove_orphans(connection, cursor, storage)
 
         processing_time = time.time() - cleanup_start
         log.info(
@@ -464,14 +497,21 @@ def run(argv=sys.argv):
         connection.close()
         storage.close()
 
-    if processed_tids:
-        processing_time = time.time() - start
+    if stats['processed_tids']:
+        processing_time = time.time() - stats['start']
         log.info(
-            "Completed: processed %s transaction in %s-mode in %s (%.2fs) " %
-            (processed_tids,
-             'init' if options.initialize else 'update',
-             str(datetime.timedelta(seconds=processing_time)),
-             processing_time)
+            "Completed in {mode}-mode: processed {processed_tids} tids, "
+            "{processed_zoids} zoids, {processed_refs} refs, "
+            "removed {remove_count} objects, "
+            "took {processing_time} ({processing_time_secs:.2f}s) ".format(
+                mode='init' if options.initialize else 'update',
+                remove_count=removed_count,
+                processing_time_secs=processing_time,
+                processing_time=str(
+                    datetime.timedelta(seconds=processing_time)
+                ),
+                **stats
+            )
         )
     else:
         log.info("Completed, there was nothing to do.")
